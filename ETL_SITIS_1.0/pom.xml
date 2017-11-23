@@ -14,8 +14,36 @@
 				<configuration>
 					<source>1.8</source>
 					<target>1.8</target>
+					<mainClass>isped.sitis.etl.MainApp</mainClass>
 				</configuration>
 			</plugin>
+
+			<plugin>
+				<groupId>com.zenjava</groupId>
+				<artifactId>javafx-maven-plugin</artifactId>
+				<version>8.8.3</version>
+				<configuration>
+					<mainClass>isped.sitis.etl.MainApp</mainClass>
+					<vendor>ISPED</vendor>
+					
+					<!--  <verbose>true</verbose> <jarFileName>XXXX.jar</jarFileName> 
+						<bundler>EXE</bundler> <nativeInstallers /> -->
+				</configuration>
+
+				<executions>
+					<execution>
+						<id>create-jfxjar</id>
+						<phase>package</phase>
+						<goals>
+							<goal>build-jar</goal>
+						</goals>
+					</execution>
+					<!-- <execution> <id>create-native</id> <phase>package</phase> <goals> 
+						<goal>build-native</goal> </goals> </execution> -->
+				</executions>
+
+			</plugin>
+
 		</plugins>
 
 	</build>
@@ -46,11 +74,7 @@
 			<version>1.7.5</version>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-			<groupId>io.swagger</groupId>
-			<artifactId>swagger-core</artifactId>
-			<version>1.5.0</version>
-		</dependency>
+		
 
 	</dependencies>
 </project>
