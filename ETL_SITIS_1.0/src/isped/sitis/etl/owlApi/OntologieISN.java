@@ -221,7 +221,7 @@ public class OntologieISN {
 				
 	// **********  enregistement de  l'ontologie *************
 		 
-		File enregistrement = new File("C:/Users/sentenh/Desktop/onto_registre/ont_registre.owl");
+		File enregistrement = new File("C:/Users/ccecqa/Desktop/ont_registre.owl");
 		manager.saveOntology(ontologieRegistre,IRI.create(enregistrement.toURI()));
 		 
 		 
