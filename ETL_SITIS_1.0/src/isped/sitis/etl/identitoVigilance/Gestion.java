@@ -13,14 +13,18 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexNotFoundException;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.Term;
 import org.semanticweb.owlapi.io.SystemOutDocumentTarget;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
@@ -32,11 +36,12 @@ import isped.sitis.etl.util.JdbcConnection;
 public class Gestion {
 	
 	public static void main(String[] args) throws IndexNotFoundException {
-		Indexer indexer = null;
+		
 		String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
 		String tmpIndexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexIndividus";
+		Integer lastIndexValue = 0;
 		try {
-			indexer = new Indexer(tmpIndexDir);
+			final Indexer indexer = new Indexer(tmpIndexDir);
 			
 			
 			JdbcConnection jdbc = new JdbcConnection("cancerETL", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
@@ -52,22 +57,19 @@ public class Gestion {
 			Stream<Record> allRecords = Stream.concat(anapathRecords,sejourRecords);
 			
 			
-			/*.filter(x -> x.getNom().equals("ELOSTE")).forEach(x -> System.out.println(x.toString()));*/
-			
-			/*.collect(Collectors.groupingBy(Record::getTraits))
-			.entrySet().stream().map(e -> e.getKey()).filter(x -> x.contains("EMOSTE")).forEach(x-> System.out.println(x));
-			System.out.println("finished iteration on concat");*/
+			 /* Create object of AtomicInteger with initial value `0` */
+	        AtomicInteger docIndex = new AtomicInteger(lastIndexValue);
 			
 			ArrayList<Document> documents = (ArrayList<Document>) allRecords
 			.collect(Collectors.groupingBy(Record::getTraits))
 			.entrySet().parallelStream()
-			.map( e -> individuToDocument( e.getKey(), e.getValue() ) )
+			.map( e -> individuToDocument( e.getKey(), e.getValue(), docIndex.getAndIncrement() ) )
 			.collect(Collectors.toList());
 			
 			
 			documents.parallelStream().forEach(t -> {
 				try {
-					Indexer.indexDocument(t);
+					indexer.indexDocument(t);
 				} catch (IOException e1) {
 					e1.printStackTrace();
 				}
@@ -76,26 +78,50 @@ public class Gestion {
 			System.out.println("finished indexing");
 			
 			final Searcher tmpSearcher = new Searcher(tmpIndexDir);
-			final Searcher totalSearcher;
-			totalSearcher = new Searcher(indexDir);
-
+			final Searcher totalSearcher = new Searcher(indexDir);
+			final Indexer finalIndexer = new Indexer(indexDir);
+			
 			documents.stream()
 			.filter(x -> x.getField("nom").stringValue().equals("EMOSTE"))
 			.forEach( x -> {
+				
+				//-----------Recherche du hit exacte si individu existe deja dans DB ------------	
+				//TODO check si recupere plus de 1 doc
+				System.out.println("Exact hits:");
+				Document exactHit = (Document)totalSearcher.exactQuery(x.getField("nom").stringValue(), 
+																	x.getField("prenom").stringValue(), 
+																	x.getField("sexe").stringValue(), 
+																	x.getField("ddn").stringValue()
+																	);
+				//-----------------------------------------------------------------------------------
+				
+				//-----------Creation + MAJ d'un nouveau document : fusion de l'actuel et de l'existant-----	
+				Document mergedDoc = mergeDocs(x, exactHit, docIndex.incrementAndGet());
+				try {
+					finalIndexer.getWriter().updateDocument(new Term("id", exactHit.getField("id").stringValue()), mergedDoc);
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				//Le mergedDoc remplace le document existant dans l'index, alors flaggé supprimé dans l'index
+				//-----------------------------------------------------------------------------------				
+
 				System.out.println(x);
-				//generate Stream and concatenate tehm to iter over all hits from both 
+				//generate Stream and concatenate them to iter over all hits from both 
 				//	tmpIndex and Index
 				Stream<Document> tmpHits = tmpSearcher.fuzzyQuery(x.getField("nom").stringValue(), x.getField("prenom").stringValue(), x.getField("sexe").stringValue(), x.getField("ddn").stringValue())
 														.stream();
-				Stream totalHits = totalSearcher.fuzzyQuery(x.getField("nom").stringValue(), x.getField("prenom").stringValue(), x.getField("sexe").stringValue(), x.getField("ddn").stringValue())
+				Stream<Document> totalHits = totalSearcher.fuzzyQuery(x.getField("nom").stringValue(), x.getField("prenom").stringValue(), x.getField("sexe").stringValue(), x.getField("ddn").stringValue())
 												.stream();
-				Stream<Document> allHits = Stream.concat(tmpHits.filter(d -> d.getField("nom").stringValue().equals(x.getField("nom").stringValue())
-																			&& d.getField("prenom").stringValue().equals(x.getField("sexe").stringValue())
-																			&& d.getField("sexe").stringValue().equals(x.getField("sexe").stringValue())
-																			&& d.getField("ddn").stringValue().equals(x.getField("ddn").stringValue())
+				Stream<Document> allHits = Stream.concat(tmpHits.filter(d -> !((Document) d).getField("id").stringValue().equals(x.getField("id").stringValue())
+																		)
+														,totalHits.filter(d -> !((Document) d).getField("id").stringValue().equals(exactHit.getField("id").stringValue())
 																			)
-														,totalHits);
+														);
+				
 				allHits.forEach(h -> System.out.println(h.toString()));
+				
+
+				
 				
 				
 			} );
@@ -110,10 +136,11 @@ public class Gestion {
 		
 		
 	}
-	public static Document individuToDocument(String traits, List<Record> records) {
+	public static Document individuToDocument(String traits, List<Record> records, Integer docIndex) {
 		String[] splitTraits = traits.split("\t");
 		
 		Document doc = new Document();
+	    doc.add(new StringField("id", String.valueOf(docIndex), Field.Store.YES));
 	    doc.add(new StringField("prenom", splitTraits[0], Field.Store.YES));
 	    doc.add(new StringField("nom", splitTraits[1], Field.Store.YES));
 	    doc.add(new StringField("sexe", splitTraits[2], Field.Store.YES));
@@ -145,6 +172,25 @@ public class Gestion {
 	    return doc;
 				
 	}
+	
+	public static Document mergeDocs (Document doc1, Document doc2, Integer docIndex) {	
+		
+		Document mergedDoc = new Document();
+		mergedDoc.add(new StringField("id", String.valueOf(docIndex), Field.Store.YES));
+
+		
+		Stream.of(doc1.getFields())
+		.filter(f -> !((Field) f).name().equals("id"))
+		.forEach(f -> mergedDoc.add((IndexableField) f));
+		
+		Stream.of(doc2.getFields())
+		.filter(f -> !((Field) f).name().equals("id"))
+		.forEach(f -> mergedDoc.add((IndexableField) f));
+	  
+		return mergedDoc;
+		
+	}
+	
 	public static Document sejourRecordToDocument(String record) {
 		String[] traits = record.split("\t");
 		String sexe = traits[0];

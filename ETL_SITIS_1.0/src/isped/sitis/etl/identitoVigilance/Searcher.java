@@ -73,4 +73,38 @@ public class Searcher {
  		
 	}
 	
+	public Document exactQuery(String nom, String prenom, String sexe, String ddn) {
+		Builder booleanQuery = new BooleanQuery.Builder();
+		
+		Query query1 = new TermQuery(new Term("nom", nom));
+		Query query2 = new TermQuery(new Term("prenom", prenom));
+		Query query3 = new TermQuery(new Term("sexe", sexe));
+		Query query4 = new TermQuery(new Term("ddn", ddn));
+		
+		booleanQuery.add(query1, Occur.MUST);
+		booleanQuery.add(query2, Occur.MUST);
+		booleanQuery.add(query3, Occur.MUST);
+		booleanQuery.add(query4, Occur.MUST);
+		
+		collector = TopScoreDocCollector.create(5);
+		
+		ArrayList<Document> returnedDocs = new ArrayList<>();
+		try {
+			searcher.search(booleanQuery.build(),collector);
+			ScoreDoc[] hits = collector.topDocs().scoreDocs;
+			
+			for(int i=0;i<hits.length;++i) {
+		          int docId = hits[i].doc;
+		          Document d = searcher.doc(docId);
+		          returnedDocs.add(d);
+		          System.out.println((i + 1) + ". " + d.get("nom") + d.get("prenom") + d.get("sexe") + d.get("ddn") + " score=" + hits[i].score);
+		        }
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return returnedDocs.get(0);
+	}
+	
 }

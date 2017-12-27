@@ -23,9 +23,9 @@ public class Indexer {
 
 	// private static EnglishAnalyzer analyzer = new
 	// EnglishAnalyzer(Version.LUCENE_40, EnglishAnalyzer.getDefaultStopSet());
-	private static FrenchAnalyzer analyzer = new FrenchAnalyzer(FrenchAnalyzer.getDefaultStopSet());
-	private static IndexWriter writer;
-	private static ArrayList<Document> queue;
+	private  FrenchAnalyzer analyzer = new FrenchAnalyzer(FrenchAnalyzer.getDefaultStopSet());
+	private  IndexWriter writer;
+	private  ArrayList<Document> queue;
 	
 
 	Indexer(String indexDir) throws IOException {
@@ -36,11 +36,13 @@ public class Indexer {
 	}
 
 	
-	public static void indexDocument(Document doc) throws IOException {
+	public  void indexDocument(Document doc) throws IOException {
 		writer.addDocument(doc);		
 	}
 
-	
+	public IndexWriter getWriter() {
+		return writer;
+	}
 
 	
 	public void closeIndex() throws IOException {
