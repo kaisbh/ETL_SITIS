@@ -3,21 +3,21 @@ import java.sql.*;
 import java.sql.Date;
 import java.util.*;
 
-public class jdbcConnection {
+public class jdbcConnectionKais {
 	// JDBC driver name and database URL
 	public static String JDBC_DRIVER = "com.mysql.jdbc.Driver";
-	public static String host = "localhost";
-	public static String dbName = "medical_center";
+	public static String host = "localhost:8889";
+	public static String dbName = "cancerETL";
 
 	public static Connection conn = null;
 	public static Statement stmt = null;
 	// public static ResultSet rs;
 	// Database credentials
-	static final String USER = "root";
-	static final String PASS = "";
+	public static final String USER = "root"; //rendu public pour acces depuis un autre package
+	public static final String PASS = "root";
 
-	public jdbcConnection() {
-
+	public jdbcConnection(String dbName) {
+		this.dbName=dbName;
 	}
 
 	public static void jdbcload() {
@@ -110,6 +110,6 @@ public class jdbcConnection {
 	}
 
 	public static void main(String[] args) throws SQLException {
-		execQuery("SELECT id, nom FROM tab_patient");
+		execQuery("SELECT * from tab_cim10");
 	}
 }
