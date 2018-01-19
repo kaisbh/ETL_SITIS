@@ -12,7 +12,9 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -34,108 +36,42 @@ import com.mysql.jdbc.Connection;
 import isped.sitis.etl.util.JdbcConnection;
 
 public class Gestion {
-	
+	static Integer lastIndexValue = 0;
+	static String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
+	//String tmpIndexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexIndividus";
+
 	public static void main(String[] args) throws IndexNotFoundException {
 		
-		String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
-		String tmpIndexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexIndividus";
-		Integer lastIndexValue = 0;
-		try {
-			final Indexer indexer = new Indexer(tmpIndexDir);
+		Stream<Record> allRecords = getRecordsFromDB();
+		ArrayList<Document> documents = groupRecordsByTraitAndConvertIntoDocument(allRecords,lastIndexValue);
+		mergeExistingIndividualOrAddNewToIndex(indexDir, documents);
 			
 			
-			JdbcConnection jdbc = new JdbcConnection("cancerETL", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
-			jdbc.jdbcload();
-			jdbc.jdbcConnect();
-			
-			 Stream<Record> sejourRecords = getRecordsFromSejour(jdbc, 1, 10000).parallelStream()
-					 .map(x -> new SejourRecord(x));
-			 
-			 Stream<Record> anapathRecords = getRecordsFromAnapath(jdbc, 1, 10000).parallelStream()
-						.map(x -> new AnapathRecord(x));
-			
-			Stream<Record> allRecords = Stream.concat(anapathRecords,sejourRecords);
 			
 			
-			 /* Create object of AtomicInteger with initial value `0` */
-	        AtomicInteger docIndex = new AtomicInteger(lastIndexValue);
 			
-			ArrayList<Document> documents = (ArrayList<Document>) allRecords
-			.collect(Collectors.groupingBy(Record::getTraits))
-			.entrySet().parallelStream()
-			.map( e -> individuToDocument( e.getKey(), e.getValue(), docIndex.getAndIncrement() ) )
-			.collect(Collectors.toList());
-			
-			
-			documents.parallelStream().forEach(t -> {
-				try {
-					indexer.indexDocument(t);
-				} catch (IOException e1) {
-					e1.printStackTrace();
-				}
-			});
-			indexer.closeIndex();
-			System.out.println("finished indexing");
-			
-			final Searcher tmpSearcher = new Searcher(tmpIndexDir);
-			final Searcher totalSearcher = new Searcher(indexDir);
-			final Indexer finalIndexer = new Indexer(indexDir);
-			
-			documents.stream()
-			.filter(x -> x.getField("nom").stringValue().equals("EMOSTE"))
-			.forEach( x -> {
-				
-				//-----------Recherche du hit exacte si individu existe deja dans DB ------------	
-				//TODO check si recupere plus de 1 doc
-				System.out.println("Exact hits:");
-				Document exactHit = (Document)totalSearcher.exactQuery(x.getField("nom").stringValue(), 
-																	x.getField("prenom").stringValue(), 
-																	x.getField("sexe").stringValue(), 
-																	x.getField("ddn").stringValue()
-																	);
-				//-----------------------------------------------------------------------------------
-				
-				//-----------Creation + MAJ d'un nouveau document : fusion de l'actuel et de l'existant-----	
-				Document mergedDoc = mergeDocs(x, exactHit, docIndex.incrementAndGet());
-				try {
-					finalIndexer.getWriter().updateDocument(new Term("id", exactHit.getField("id").stringValue()), mergedDoc);
-				} catch (IOException e1) {
-					e1.printStackTrace();
-				}
-				//Le mergedDoc remplace le document existant dans l'index, alors flaggé supprimé dans l'index
-				//-----------------------------------------------------------------------------------				
-
-				System.out.println(x);
-				//generate Stream and concatenate them to iter over all hits from both 
-				//	tmpIndex and Index
-				Stream<Document> tmpHits = tmpSearcher.fuzzyQuery(x.getField("nom").stringValue(), x.getField("prenom").stringValue(), x.getField("sexe").stringValue(), x.getField("ddn").stringValue())
-														.stream();
-				Stream<Document> totalHits = totalSearcher.fuzzyQuery(x.getField("nom").stringValue(), x.getField("prenom").stringValue(), x.getField("sexe").stringValue(), x.getField("ddn").stringValue())
-												.stream();
-				Stream<Document> allHits = Stream.concat(tmpHits.filter(d -> !((Document) d).getField("id").stringValue().equals(x.getField("id").stringValue())
-																		)
-														,totalHits.filter(d -> !((Document) d).getField("id").stringValue().equals(exactHit.getField("id").stringValue())
-																			)
-														);
-				
-				allHits.forEach(h -> System.out.println(h.toString()));
-				
-
-				
-				
-				
-			} );
-			
-			
-			jdbc.jdbcClose();
-			indexer.closeIndex();
-			
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 		
 		
 	}
+	
+	public static Map FindConflicts(Map preExistingConflicts, Indexer indexer) {
+		Map ConflictMap = new ConcurrentHashMap();
+		//generate Stream and concatenate them to iter over all hits from both 
+		//	tmpIndex and Index
+		/*Stream<Document> tmpHits = tmpSearcher.fuzzyQuery(x.getField("nom").stringValue(), x.getField("prenom").stringValue(), x.getField("sexe").stringValue(), x.getField("ddn").stringValue())
+												.stream();
+		Stream<Document> totalHits = totalSearcher.fuzzyQuery(x.getField("nom").stringValue(), x.getField("prenom").stringValue(), x.getField("sexe").stringValue(), x.getField("ddn").stringValue())
+										.stream();
+		Stream<Document> allHits = Stream.concat(tmpHits.filter(d -> !((Document) d).getField("id").stringValue().equals(x.getField("id").stringValue())
+																)
+												,totalHits.filter(d -> !((Document) d).getField("id").stringValue().equals(exactHit.getField("id").stringValue())
+																	)
+												);
+		
+		allHits.forEach(h -> System.out.println(h.toString()));*/
+		return ConflictMap;
+	}
+	
 	public static Document individuToDocument(String traits, List<Record> records, Integer docIndex) {
 		String[] splitTraits = traits.split("\t");
 		
@@ -173,20 +109,33 @@ public class Gestion {
 				
 	}
 	
-	public static Document mergeDocs (Document doc1, Document doc2, Integer docIndex) {	
+	public static Document mergeDocs (Document doc1, Document doc2, String docIndex) {	
 		
+		Document tmpDoc = new Document();
 		Document mergedDoc = new Document();
-		mergedDoc.add(new StringField("id", String.valueOf(docIndex), Field.Store.YES));
+
+		mergedDoc.add(new StringField("id", docIndex, Field.Store.YES));
 
 		
-		Stream.of(doc1.getFields())
+		doc1.getFields().stream()
 		.filter(f -> !((Field) f).name().equals("id"))
-		.forEach(f -> mergedDoc.add((IndexableField) f));
+		.forEach(f -> tmpDoc.add((IndexableField) f));
 		
-		Stream.of(doc2.getFields())
+		doc2.getFields().stream()
 		.filter(f -> !((Field) f).name().equals("id"))
-		.forEach(f -> mergedDoc.add((IndexableField) f));
+		.forEach(f -> tmpDoc.add((IndexableField) f));
 	  
+		tmpDoc.getFields().stream()
+		.collect(Collectors.groupingBy(IndexableField::name)).entrySet().stream() //cim10: field1,field2 , anapath:field1,field2 ...
+		.forEach(e -> {	
+						e.getValue().stream()			
+						.map(f -> f.stringValue())		//field1 -> value of field1
+						.distinct()
+						.forEach(v -> mergedDoc.add(new StringField(e.getKey(), v, Field.Store.YES)));
+						}
+				);
+		
+		
 		return mergedDoc;
 		
 	}
@@ -282,10 +231,90 @@ public class Gestion {
 	    // ... repeat for each column in result set
 	    writer.addDocument(doc);*/
 	
+	public static Stream<Record> getRecordsFromDB(){
 		
-	
-	public void processDocument(Document doc) {
+		Stream<Record> allRecords;
 		
+		JdbcConnection jdbc = new JdbcConnection("cancerETL", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
+		jdbc.jdbcload();
+		jdbc.jdbcConnect();
+		
+		 Stream<Record> sejourRecords = getRecordsFromSejour(jdbc, 1, 10000).parallelStream()
+				 .map(x -> new SejourRecord(x));
+		 
+		 Stream<Record> anapathRecords = getRecordsFromAnapath(jdbc, 1, 10000).parallelStream()
+					.map(x -> new AnapathRecord(x));
+		
+		allRecords = Stream.concat(anapathRecords,sejourRecords);
+		
+		jdbc.jdbcClose();
+		return allRecords;
+	}
 	
+	public static ArrayList<Document> groupRecordsByTraitAndConvertIntoDocument(Stream<Record> allRecords, Integer lastIndexValue){
+		 /* Create object of AtomicInteger with initial value `0` */
+	    AtomicInteger docIndex = new AtomicInteger(lastIndexValue);
+		
+		return (ArrayList<Document>) allRecords
+		.collect(Collectors.groupingBy(Record::getTraits))
+		.entrySet().parallelStream()
+		.map( e -> individuToDocument( e.getKey(), e.getValue(), docIndex.getAndIncrement() ) )
+		.collect(Collectors.toList());
+	
+	}
+	public static void mergeExistingIndividualOrAddNewToIndex(String indexDir, ArrayList<Document> documents){
+		try {
+			final Indexer finalIndexer = new Indexer(indexDir);
+			final Searcher totalSearcher = new Searcher(indexDir);
+			documents.parallelStream()
+			.filter(x -> x.getField("nom").stringValue().equals("EMOSTE"))// se limite aux patients EMOSTE pour testing
+			.forEach( x -> {
+				
+				//-----------Recherche du hit exacte si individu existe deja dans DB ------------	
+				//TODO check si recupere plus de 1 doc
+				System.out.println("Exact hits:");
+				Optional<Document> exactHit = (Optional<Document>)totalSearcher.exactQuery(x.getField("nom").stringValue(), 
+																	x.getField("prenom").stringValue(), 
+																	x.getField("sexe").stringValue(), 
+																	x.getField("ddn").stringValue()
+																	);
+				if(exactHit.isPresent()) {
+					
+				
+					String exactHitId = exactHit.get().getField("id").stringValue();
+					//-----------------------------------------------------------------------------------
+					
+					//-----------Creation + MAJ d'un nouveau document : fusion du courrant (x) et de l'existant (exacthit)-----	
+					Document mergedDoc = mergeDocs(x, exactHit.get(), exactHitId);
+					try {
+						finalIndexer.getWriter().updateDocument(new Term("id", exactHit.get().getField("id").stringValue()), mergedDoc);
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+					//Le mergedDoc remplace le document existant dans l'index, alors flaggé supprimé dans l'index (est alors skip lors recherche) 
+					//-----------------------------------------------------------------------------------				
+					System.out.println("Document");	
+					System.out.println(x);
+					System.out.println("Fusioné dans le document: ");	
+					System.out.println(exactHit.get());	
+					
+				}else {
+					try {
+						finalIndexer.getWriter().addDocument(x);
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+					System.out.println("Nouveau Document");	
+					System.out.println(x);
+				}
+				
+			} );
+		} catch (IOException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		
+		
+		
 	}
 }

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Optional;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
@@ -73,7 +74,7 @@ public class Searcher {
  		
 	}
 	
-	public Document exactQuery(String nom, String prenom, String sexe, String ddn) {
+	public Optional<Document> exactQuery(String nom, String prenom, String sexe, String ddn) {
 		Builder booleanQuery = new BooleanQuery.Builder();
 		
 		Query query1 = new TermQuery(new Term("nom", nom));
@@ -89,6 +90,7 @@ public class Searcher {
 		collector = TopScoreDocCollector.create(5);
 		
 		ArrayList<Document> returnedDocs = new ArrayList<>();
+		Document returnedDoc = null;
 		try {
 			searcher.search(booleanQuery.build(),collector);
 			ScoreDoc[] hits = collector.topDocs().scoreDocs;
@@ -99,12 +101,16 @@ public class Searcher {
 		          returnedDocs.add(d);
 		          System.out.println((i + 1) + ". " + d.get("nom") + d.get("prenom") + d.get("sexe") + d.get("ddn") + " score=" + hits[i].score);
 		        }
+			returnedDoc = returnedDocs.get(0);
 			
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		}catch(IndexOutOfBoundsException e) {
+			System.out.println("Aucun match");
 		}
-		return returnedDocs.get(0);
+		
+		return Optional.ofNullable(returnedDoc);
 	}
 	
 }
