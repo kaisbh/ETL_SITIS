@@ -125,7 +125,7 @@ public class OntologieISN {
 					 labelsmorpho03.add(labelmorpho03)
 					;
 						 for (label m03:labelsmorpho03) {
-								OWLClass addclass  =dataFactory.getOWLClass(":"+m03.getclasse(), pm);
+						 		OWLClass addclass  =dataFactory.getOWLClass(":"+m03.getclasse(), pm);
 								OWLDeclarationAxiom declarationAxiom = dataFactory.getOWLDeclarationAxiom(addclass);
 								manager.addAxiom(ontologieRegistre, declarationAxiom);
 						
