@@ -48,7 +48,7 @@ public class Gestion {
 	static String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
 	//String tmpIndexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexIndividus";
 
-	static ArrayList<HashSet<String>> preExistingConflicts = new ArrayList<HashSet<String>>();
+	static Set<Set<String>> Conflicts = new HashSet<Set<String>>();
 	static ArrayList<String> newConflicts = new ArrayList<String>();
 	
 	public static void main(String[] args) throws IndexNotFoundException {
@@ -62,7 +62,23 @@ public class Gestion {
 			mergeExistingIndividualOrAddNewToIndex(indexDir, documents);
 		}
 		
-		Map<String,Set<String>> conflictMap =  FindConflicts(indexDir);
+		ConcurrentMap<String,Set<String>> conflictMap =  FindConflicts(indexDir);
+		System.out.println(conflictMap);
+
+		Set<Set<String>> newConflicts = setConflicts(conflictMap);		
+		System.out.println(newConflicts);
+		
+		Conflicts = updateConflicts(Conflicts, newConflicts); // removes previous Conflicts that were used to find new ones (no redondancy)
+															// adds new ones to Conflicts
+		newConflicts.clear();
+		
+		
+		Searcher searcher = new Searcher(indexDir);
+		newConflicts.stream()
+		.forEach(set -> {
+			set.stream().forEach(id -> searcher.exactQuery("id", id));
+												});
+		
 		
 		/*ConcurrentHashMap<String,List<String>> testConflictMap = new ConcurrentHashMap<String,List<String>>();
 		testConflictMap.put("11", Arrays.asList("4","12","10"));
@@ -72,12 +88,24 @@ public class Gestion {
 		HashSet<String> h = new HashSet<>(Arrays.asList("4", "5","6"));
 		preExistingConflicts.add(h);
 		System.out.println(walkConflictMapforKey("4", testConflictMap));*/
-		System.out.println(conflictMap);
 		
+	}
+	
+	public static Set<Set<String>> updateConflicts(Set<Set<String>> preExistingConflicts, Set<Set<String>> newConflicts){
+		Set<String> flatConflicts= newConflicts.stream().flatMap(x -> x.stream()).collect(Collectors.toSet());
+		
+		Set<Set<String>> majConflicts = preExistingConflicts.stream().filter(set -> {
+			return set.stream().anyMatch(s -> flatConflicts.contains(s));
+		}).collect(Collectors.toSet());
+		
+		majConflicts.addAll(newConflicts);
+		
+		return majConflicts;
 	}
 	
 	public static Set<Set<String>> setConflicts(ConcurrentMap<String, Set<String>> conflictMap){
 		Set<Set<String>> newConflicts = conflictMap.entrySet().parallelStream()
+		.filter(entry -> entry.getValue().size()>1)
 		.map(entry -> walkConflictMapforKey(entry.getKey(), conflictMap))
 		.distinct()
 		.collect(Collectors.toSet());
@@ -135,7 +163,7 @@ public class Gestion {
 	}
 	public static void  recursiveWalk(final String key, Map<String,Set<String>> conflictMap, Set<String> conflicts) {
 		
-		Optional<HashSet<String>> existingConflicts = preExistingConflicts.parallelStream()
+		Optional<Set<String>> existingConflicts = Conflicts.parallelStream()
 				.filter(idList -> idList.contains(key))
 				.findFirst();
 		
