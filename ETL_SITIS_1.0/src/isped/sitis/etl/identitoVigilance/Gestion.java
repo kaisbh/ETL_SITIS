@@ -14,14 +14,18 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.jena.graph.impl.CollectionGraph;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.IntPoint;
@@ -44,9 +48,9 @@ public class Gestion {
 	static String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
 	//String tmpIndexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexIndividus";
 
-	static ArrayList<String> preExistingConflicts = new ArrayList<String>();
+	static ArrayList<HashSet<String>> preExistingConflicts = new ArrayList<HashSet<String>>();
 	static ArrayList<String> newConflicts = new ArrayList<String>();
-
+	
 	public static void main(String[] args) throws IndexNotFoundException {
 		
 		Stream<Record> allRecords = getRecordsFromDB();
@@ -57,30 +61,42 @@ public class Gestion {
 		}else {
 			mergeExistingIndividualOrAddNewToIndex(indexDir, documents);
 		}
-			
-		Map<String,List<String>> conflictMap =  FindConflicts(indexDir);
-		/*ConcurrentHashMap<String,List<String>> testConflictMap = new ConcurrentHashMap<String,List<String>>();
 		
+		Map<String,Set<String>> conflictMap =  FindConflicts(indexDir);
+		
+		/*ConcurrentHashMap<String,List<String>> testConflictMap = new ConcurrentHashMap<String,List<String>>();
 		testConflictMap.put("11", Arrays.asList("4","12","10"));
 		testConflictMap.put("12", Arrays.asList("3","4"));
 		testConflictMap.put("3", Arrays.asList("12"));
-		testConflictMap.put("4", Arrays.asList("10"));
-		
-		System.out.println(walkConflictMapforKey("11", testConflictMap));*/
+		testConflictMap.put("4", Arrays.asList("11"));
+		HashSet<String> h = new HashSet<>(Arrays.asList("4", "5","6"));
+		preExistingConflicts.add(h);
+		System.out.println(walkConflictMapforKey("4", testConflictMap));*/
 		System.out.println(conflictMap);
 		
 	}
 	
-	public static Map<String,List<String>> FindConflicts(String indexDir) {
-		// TODO attention si indexer ici et indexer pour ajout de doc en meme temps = erreurs ?
+	public static Set<Set<String>> setConflicts(ConcurrentMap<String, Set<String>> conflictMap){
+		Set<Set<String>> newConflicts = conflictMap.entrySet().parallelStream()
+		.map(entry -> walkConflictMapforKey(entry.getKey(), conflictMap))
+		.distinct()
+		.collect(Collectors.toSet());
 		
-		Map<String,List<String>> ConflictMap = new ConcurrentHashMap<String,List<String>>();
+		return newConflicts;
+		
+	}
+	
+	public static ConcurrentMap<String,Set<String>> FindConflicts(String indexDir) {
+		// TODO attention si indexer ici et indexer pour ajout de doc en meme temps = erreurs ?
+		//TODO retirage des null pas opti
+		
+		ConcurrentMap<String, Set<String>> conflictMap = new ConcurrentHashMap<String,Set<String>>();
 		
 		final Searcher searcher = new Searcher(indexDir);
 		
-		ConflictMap = searcher.exactQuery("maj","true") /*On récupère les documents maj avec exact query sur maj==true*/
+		conflictMap = searcher.exactQuery("maj","true") /*On récupère les documents maj avec exact query sur maj==true*/
 			.parallelStream()
-			.collect(Collectors.toMap( /*On créé une map=  id docMaj : [id fuzzy hit,id fuzzy hit,...] */
+			.collect(Collectors.toConcurrentMap( /*On créé une map=  id docMaj : [id fuzzy hit,id fuzzy hit,...] */
 						  			(x -> x.getField("id").stringValue()) /* La cle est l'identifiant du document courrant*/
 						  			,
 						  			(x ->{					/* La valeur est la liste des id des hits fuzzy*/
@@ -92,23 +108,47 @@ public class Gestion {
 						  								x.getField("ddn").stringValue()
 								  						)
 						  						.stream()
+						  						//.filter(hit -> !hit.getField("id").stringValue().equals(x.getField("id").stringValue()))
 						  						.map(hit -> hit.getField("id").stringValue())
-						  						.collect(Collectors.toList());
+						  						.collect(Collectors.toSet());
 						  				}
 						  			)
 						  		)
 				);
+		/*ConcurrentMap<String,List<String>> noNullConflictMap = new ConcurrentHashMap<String,List<String>>();
 
-		return ConflictMap;
+		noNullConflictMap = conflictMap.entrySet()
+					.parallelStream()
+					.filter(entry -> entry.getValue() != null)
+					.collect(Collectors.toConcurrentMap(Map.Entry::getKey, Map.Entry::getValue));
+			
+		*/
+
+		return conflictMap;
 	}
 	
 	
-	public static List<String> walkConflictMapforKey(String key, Map<String,List<String>> conflictMap){
-		ArrayList<String> conflicts = new ArrayList<String>();
-		recWalk(key, conflictMap, conflicts);
+	public static Set<String> walkConflictMapforKey(String key, Map<String,Set<String>> conflictMap){
+		Set<String> conflicts = new HashSet<String>();
+		recursiveWalk(key, conflictMap, conflicts);
 		return conflicts;
 	}
-	public static void  recWalk(final String key, Map<String,List<String>> conflictMap, ArrayList<String> conflicts) {
+	public static void  recursiveWalk(final String key, Map<String,Set<String>> conflictMap, Set<String> conflicts) {
+		
+		Optional<HashSet<String>> existingConflicts = preExistingConflicts.parallelStream()
+				.filter(idList -> idList.contains(key))
+				.findFirst();
+		
+		if(existingConflicts.isPresent()) { // si la clé est un doc existant et maj et dans un conflit existant
+			conflicts.addAll(existingConflicts.get());  // on ajoute les conflits connu et travail que sur
+														// les nouveaux doc maj qui sont pas dans le conflit connu
+			conflictMap.get(key).stream()
+			.filter(id -> !existingConflicts.get().contains(id))
+			.forEach(id ->recursiveWalk(id,conflictMap,conflicts) );
+			
+			return;
+		}
+		
 		if(conflicts.contains(key)) {
 			return ;
 		}
@@ -116,9 +156,14 @@ public class Gestion {
 		if(!conflictMap.containsKey(key)) {
 			 return ;
 		}
-		for (int i = 0; i < conflictMap.get(key).size(); i++) {
-			recWalk(conflictMap.get(key).get(i),conflictMap,conflicts);
-		}
+		
+		conflictMap.get(key).stream()
+		.forEach(id ->recursiveWalk(id,conflictMap,conflicts) );
+		
+		/*for (int i = 0; i < conflictMap.get(key).size(); i++) {
+			recursiveWalk(conflictMap.get(key).get(i),conflictMap,conflicts);
+		}*/
+		
 		return;
 	}
 
@@ -240,6 +285,7 @@ public class Gestion {
 				.collect(Collectors.toSet());
 		
 		String maj = (existingCodes.equals(newCodes)) ? "false" : "true"; // on flag  comme maj que si les codes on changés
+		maj = (doc2.getField("maj").stringValue().equals("true")) ? "true" : "false"; // si le doc existant est maj 
 		mergedDoc.add(new StringField("maj", maj, Field.Store.YES));
 		
 		return mergedDoc;
