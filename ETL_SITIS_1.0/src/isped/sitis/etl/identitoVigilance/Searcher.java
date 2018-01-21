@@ -144,5 +144,38 @@ public class Searcher {
 		
 		return returnedDocs;
 	}
+	public ArrayList<Document> searchUpdatedAndTreated() {
+		Builder booleanQuery = new BooleanQuery.Builder();
+		
+		Query query1 = new TermQuery(new Term("maj", "true"));
+		Query query2 = new TermQuery(new Term("traite", "true"));
+
+		booleanQuery.add(query1, Occur.MUST);
+		booleanQuery.add(query1, Occur.MUST);
+
+		TopScoreDocCollector collector = TopScoreDocCollector.create(1000000);
+		
+		ArrayList<Document> returnedDocs = new ArrayList<>();
+		
+		try {
+			searcher.search(booleanQuery.build(),collector);
+			ScoreDoc[] hits = collector.topDocs().scoreDocs;
+			
+			for(int i=0;i<hits.length;++i) {
+		          int docId = hits[i].doc;
+		          Document d = searcher.doc(docId);
+		          returnedDocs.add(d);
+		          System.out.println((i + 1) + ". " + d.get("nom") + d.get("prenom") + d.get("sexe") + d.get("ddn") + " score=" + hits[i].score);
+		        }
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}catch(IndexOutOfBoundsException e) {
+			System.out.println("Aucun match");
+		}
+		
+		return returnedDocs;
+	}
 	
 }

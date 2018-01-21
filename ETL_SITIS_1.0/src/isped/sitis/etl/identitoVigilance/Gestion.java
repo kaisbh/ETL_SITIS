@@ -51,6 +51,8 @@ public class Gestion {
 	static Set<Set<String>> Conflicts = new HashSet<Set<String>>();
 	static ArrayList<String> newConflicts = new ArrayList<String>();
 	
+	static ArrayList<String> idsDesEntreesASuppEnAval = new ArrayList<String>();
+	
 	public static void main(String[] args) throws IndexNotFoundException {
 		
 		Stream<Record> allRecords = getRecordsFromDB();
@@ -63,21 +65,22 @@ public class Gestion {
 		}
 		
 		ConcurrentMap<String,Set<String>> conflictMap =  FindConflicts(indexDir);
-		System.out.println(conflictMap);
 
 		Set<Set<String>> newConflicts = setConflicts(conflictMap);		
-		System.out.println(newConflicts);
 		
 		Conflicts = updateConflicts(Conflicts, newConflicts); // removes previous Conflicts that were used to find new ones (no redondancy)
 															// adds new ones to Conflicts
 		newConflicts.clear();
 		
+		idsDesEntreesASuppEnAval.addAll(updateAllDocsAfterConflictsDetection());
 		
+		System.out.println(newConflicts);
 		Searcher searcher = new Searcher(indexDir);
-		newConflicts.stream()
+		Conflicts.stream()
 		.forEach(set -> {
 			set.stream().forEach(id -> searcher.exactQuery("id", id));
 												});
+		
 		
 		
 		/*ConcurrentHashMap<String,List<String>> testConflictMap = new ConcurrentHashMap<String,List<String>>();
@@ -89,6 +92,57 @@ public class Gestion {
 		preExistingConflicts.add(h);
 		System.out.println(walkConflictMapforKey("4", testConflictMap));*/
 		
+	}
+	
+	
+	public static ArrayList<String> updateAllDocsAfterConflictsDetection() {
+		ArrayList<Document> traiteEtMaj = findTreatedAndMaj(); //TODO envoyer en aval pour supp des maladies
+		updateDocs(traiteEtMaj, Arrays.asList("traite","maj")); // on change les champs "traite" et "maj" en "false"
+		
+		Searcher searcher = new Searcher(indexDir);
+		ArrayList<Document> docsToUnMaj = searcher.exactQuery("maj", "true"); //TODO envoyer en aval pour supp des maladies
+		updateDocs(docsToUnMaj, Arrays.asList("maj")); 
+		
+		return (ArrayList<String>) traiteEtMaj.stream().map(d -> d.getField("id").stringValue()).collect(Collectors.toList());
+	}
+	public static void updateDocs(ArrayList<Document> documentsToUpdate, List<String> fieldsToFalse) {
+		
+		try {
+			Indexer finalIndexer = new Indexer(indexDir);
+
+			documentsToUpdate.parallelStream().forEach(d ->{
+				Document updatedDoc = createUpdatedDoc(d,fieldsToFalse);
+				try {
+					finalIndexer.getWriter().updateDocument(new Term("id", d.getField("id").stringValue()), updatedDoc);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			});
+			finalIndexer.closeIndex();
+		}catch (IOException e1) {
+			e1.printStackTrace();
+			}
+		
+	}
+	
+	public static Document createUpdatedDoc (Document docToUpdate, List<String> champsAmod) {	
+		Document updatedDoc = new Document();
+		
+		docToUpdate.getFields().stream()
+		.filter(f -> !champsAmod.contains(f.name()))
+		.forEach(f -> updatedDoc.add((IndexableField) f));
+		
+		champsAmod.stream().forEach(x -> updatedDoc.add(new StringField(x, "false", Field.Store.YES)) );
+		
+		return updatedDoc;
+
+		}
+	
+	public static ArrayList<Document> findTreatedAndMaj() {
+		Searcher searcher = new Searcher(indexDir);
+		System.out.println("Documents à supprimer en aval car traités mais nouveaux codes:");
+		ArrayList<Document> majEtTraites = searcher.searchUpdatedAndTreated();
+		return majEtTraites;
 	}
 	
 	public static Set<Set<String>> updateConflicts(Set<Set<String>> preExistingConflicts, Set<Set<String>> newConflicts){
@@ -205,6 +259,8 @@ public class Gestion {
 
 		Document doc = new Document();
 	    doc.add(new StringField("id", String.valueOf(docIndex), Field.Store.YES));
+	   // doc.add(new StringField("id_group", String.valueOf(docIndex), Field.Store.YES));
+
 	    doc.add(new StringField("prenom", splitTraits[0], Field.Store.YES));
 	    doc.add(new StringField("nom", splitTraits[1], Field.Store.YES));
 	    doc.add(new StringField("sexe", splitTraits[2], Field.Store.YES));
@@ -447,7 +503,7 @@ public class Gestion {
 			final Indexer finalIndexer = new Indexer(indexDir);
 			final Searcher totalSearcher = new Searcher(indexDir);
 			documents.parallelStream()
-			.filter(x -> x.getField("nom").stringValue().equals("ELOSTE"))// se limite aux patients EMOSTE pour testing
+			//.filter(x -> x.getField("nom").stringValue().equals("ELOSTE"))// se limite aux patients EMOSTE pour testing
 			.forEach( x -> {
 				
 				//-----------Recherche du hit exacte si individu existe deja dans DB ------------	
