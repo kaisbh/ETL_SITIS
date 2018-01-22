@@ -44,13 +44,15 @@ import isped.sitis.etl.util.JdbcConnection;
 
 public class Gestion {
 	static boolean firstTime = true; //mettre true si premiere indexation, false sinon
-	static Integer lastIndexValue = 0; // gade en memoire le dernier index , sorte de numAuto pour doc lucene, a sauver hors de l'app pour recupéré plus tard
+	static Integer lastIndexValue = 1; // gade en memoire le dernier index , sorte de numAuto pour doc lucene, a sauver hors de l'app pour recupéré plus tard
 	static String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
 
 	static Set<Set<String>> Conflicts = new HashSet<Set<String>>();
 	static ArrayList<String> newConflicts = new ArrayList<String>();
 	
 	static ArrayList<String> idsDesEntreesASuppEnAval = new ArrayList<String>();
+	
+	static Integer lastGroupId = 1;
 	
 	public static void main(String[] args) throws IndexNotFoundException {
 		
@@ -69,6 +71,7 @@ public class Gestion {
 		
 		Conflicts = updateConflicts(Conflicts, newConflicts); // removes previous Conflicts that were used to find new ones (no redondancy)
 															// adds new ones to Conflicts
+		setGroupIdsToGroupedDocs(Conflicts);
 		newConflicts.clear();
 		
 		idsDesEntreesASuppEnAval.addAll(updateAllDocsAfterConflictsDetection());
@@ -94,6 +97,35 @@ public class Gestion {
 		preExistingConflicts.add(h);
 		System.out.println(walkConflictMapforKey("4", testConflictMap));*/
 		
+	}
+	
+	public static void setGroupIdsToGroupedDocs(Set<Set<String>> conflicts) {
+		AtomicInteger groupId = new AtomicInteger(lastGroupId);
+		Searcher searcher = new Searcher(indexDir);
+		try {
+			Indexer indexer = new Indexer(indexDir);
+			conflicts.stream()
+			.forEach(groupOfIds -> 
+				groupOfIds.stream()
+				.map(id -> searcher.exactQuery("id", id))
+				.flatMap(x -> x.stream())
+				.forEach(doc -> {
+					doc.add(new StringField("groupId", String.valueOf(groupId.getAndIncrement()), Field.Store.YES));
+					try {
+						indexer.getWriter().updateDocument(new Term("id", doc.getField("id").stringValue()), doc);
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				})
+				);
+			indexer.closeIndex();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		lastGroupId =groupId.get();
+				
 	}
 	
 	public static Document fusionGroupedDocs(Set<String> idsGroup, Integer docId) {
@@ -152,21 +184,21 @@ public class Gestion {
 	
 	public static ArrayList<String> updateAllDocsAfterConflictsDetection() {
 		ArrayList<Document> traiteEtMaj = findTreatedAndMaj(); //TODO envoyer en aval pour supp des maladies
-		updateDocs(traiteEtMaj, Arrays.asList("traite","maj")); // on change les champs "traite" et "maj" en "false"
+		updateDocs(traiteEtMaj, Arrays.asList("traite","maj"), "false"); // on change les champs "traite" et "maj" en "false"
 		
 		Searcher searcher = new Searcher(indexDir);
 		ArrayList<Document> docsToUnMaj = searcher.exactQuery("maj", "true"); //TODO envoyer en aval pour supp des maladies
-		updateDocs(docsToUnMaj, Arrays.asList("maj")); 
+		updateDocs(docsToUnMaj, Arrays.asList("maj"), "false"); 
 		
 		return (ArrayList<String>) traiteEtMaj.stream().map(d -> d.getField("id").stringValue()).collect(Collectors.toList());
 	}
-	public static void updateDocs(ArrayList<Document> documentsToUpdate, List<String> fieldsToFalse) {
+	public static void updateDocs(ArrayList<Document> documentsToUpdate, List<String> fields, String valeur) {
 		
 		try {
 			Indexer finalIndexer = new Indexer(indexDir);
 
 			documentsToUpdate.parallelStream().forEach(d ->{
-				Document updatedDoc = createUpdatedDoc(d,fieldsToFalse);
+				Document updatedDoc = createUpdatedDoc(d,fields,valeur);
 				try {
 					finalIndexer.getWriter().updateDocument(new Term("id", d.getField("id").stringValue()), updatedDoc);
 				} catch (IOException e) {
@@ -180,14 +212,14 @@ public class Gestion {
 		
 	}
 	
-	public static Document createUpdatedDoc (Document docToUpdate, List<String> champsAmod) {	
+	public static Document createUpdatedDoc (Document docToUpdate, List<String> champsAmod, String valeur) {	
 		Document updatedDoc = new Document();
 		
 		docToUpdate.getFields().stream()
 		.filter(f -> !champsAmod.contains(f.name()))
 		.forEach(f -> updatedDoc.add((IndexableField) f));
 		
-		champsAmod.stream().forEach(x -> updatedDoc.add(new StringField(x, "false", Field.Store.YES)) );
+		champsAmod.stream().forEach(x -> updatedDoc.add(new StringField(x, valeur, Field.Store.YES)) );
 		
 		return updatedDoc;
 
