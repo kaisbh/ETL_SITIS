@@ -10,6 +10,7 @@ import java.sql.Types;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.semanticweb.elk.owlapi.ElkReasonerFactory;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -285,9 +286,44 @@ man.addAxiom(ont, definition2);
 	 	 	Maladie M = new Maladie();
 	 	 	
 	 	 	Raisonneur.getDiseases(cimss10, adicapss, "ab", M);
-	 	 	System.out.println(M.getID()+ M.getSuperclass()+ M.getClassEquilMal());
+	 	 	
+	 	 	// Création d'un string equivMal qui récupère l'(les) URI des classes ééquivalentes
+	 	 	// partsEquiv récupère toutes les URI
+	 	 	// s'il y a qu'une URI : récupération des superClasses
+	 	 	//s'il y a plusieurs URI : récupération des classes équivalentes uniquement (dans le else)
+	 	 	String equivMal = M.getClassEquilMal();
+	 	 	String[] partsEquiv = equivMal.split(Pattern.quote(","));
+	 	 	
+	 	 	if(partsEquiv.length == 1)
+	 	 	{	 	 	
+	 	 	String superClassMal = M.getSuperclass();
+	 	 	String[] partsSuper = superClassMal.split(Pattern.quote(","));
+	 	 	
+	 	 	 for (int i=0; i<partsSuper.length; i++) 
+	 	 	 	{
+	 	 		String part = partsSuper[i]; 
+		 	 	String partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
+		 	 	System.out.println(partok);
+		 	 	// ce system out.println sert à vérifier la liste des URI
+		 	 	System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
+	 	 	 	}
+	 	 	 
+	 	 	 }
+	 	 	 else	 
+	 	 	 {
+	 	 		for (int i=0; i<partsEquiv.length; i++) 
+	 	 	 	{
+	 	 		String part = partsEquiv[i]; 
+		 	 	String partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
+		 	 	System.out.println(partok);
+		 	 	// ce system out.println sert à vérifier la liste des URI
+		 	 	System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
+	 	 	 	}	 
+	 	 	 }
+	 	 	}
+
 	 	 
 	 	
 	}
 
-}
+
