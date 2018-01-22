@@ -132,7 +132,7 @@ public class Searcher {
 		          int docId = hits[i].doc;
 		          Document d = searcher.doc(docId);
 		          returnedDocs.add(d);
-		          System.out.println((i + 1) + ". " + d.get("nom") + d.get("prenom") + d.get("sexe") + d.get("ddn") + " score=" + hits[i].score);
+		          System.out.println((i + 1) + ". " + d.get("nom") + d.get("prenom") + d.get("sexe") + d.get("ddn") + "id:" + d.get("id") + " score=" + hits[i].score);
 		        }
 			
 		} catch (IOException e) {

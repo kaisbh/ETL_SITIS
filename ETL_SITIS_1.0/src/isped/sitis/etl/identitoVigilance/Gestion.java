@@ -46,7 +46,6 @@ public class Gestion {
 	static boolean firstTime = true; //mettre true si premiere indexation, false sinon
 	static Integer lastIndexValue = 0; // gade en memoire le dernier index , sorte de numAuto pour doc lucene, a sauver hors de l'app pour recupéré plus tard
 	static String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
-	//String tmpIndexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexIndividus";
 
 	static Set<Set<String>> Conflicts = new HashSet<Set<String>>();
 	static ArrayList<String> newConflicts = new ArrayList<String>();
@@ -56,7 +55,7 @@ public class Gestion {
 	public static void main(String[] args) throws IndexNotFoundException {
 		
 		Stream<Record> allRecords = getRecordsFromDB();
-		ArrayList<Document> documents = groupRecordsByTraitAndConvertIntoDocument(allRecords,lastIndexValue);
+		ArrayList<Document> documents = groupRecordsByTraitAndConvertIntoDocument(allRecords);
 		
 		if(firstTime) {
 			addNewToEmptyIndex(indexDir, documents);
@@ -74,14 +73,17 @@ public class Gestion {
 		
 		idsDesEntreesASuppEnAval.addAll(updateAllDocsAfterConflictsDetection());
 		
-		System.out.println(newConflicts);
+		System.out.println(Conflicts);
 		Searcher searcher = new Searcher(indexDir);
 		Conflicts.stream()
 		.forEach(set -> {
 			set.stream().forEach(id -> searcher.exactQuery("id", id));
 												});
 		
-		
+		AtomicInteger docid = new AtomicInteger(lastIndexValue);
+		Conflicts.stream().forEach(c -> {
+			displayDoc(fusionGroupedDocs(c, docid.getAndIncrement()));
+		});
 		
 		/*ConcurrentHashMap<String,List<String>> testConflictMap = new ConcurrentHashMap<String,List<String>>();
 		testConflictMap.put("11", Arrays.asList("4","12","10"));
@@ -94,6 +96,59 @@ public class Gestion {
 		
 	}
 	
+	public static Document fusionGroupedDocs(Set<String> idsGroup, Integer docId) {
+		Searcher searcher = new Searcher(indexDir);
+		
+		Optional<Document> fusionedDoc = idsGroup.stream()
+				.map(id -> searcher.exactQuery("id", id))
+				.flatMap(d-> d.stream())
+				.reduce((d1,d2) -> fuse2Docs(d1,d2));
+
+		fusionedDoc.get()
+		.add(new StringField("id", String.valueOf(docId), Field.Store.YES));
+		fusionedDoc.get()
+		.add(new StringField("maj", "false", Field.Store.YES));
+		fusionedDoc.get()
+		.add(new StringField("traite", "false", Field.Store.YES));
+
+		return fusionedDoc.get();
+	}
+	
+	public static Document fuse2Docs (Document doc1, Document doc2) {	
+		List<String> fieldsNonFusion = Arrays.asList("id", "maj","traite");
+
+		Document mergedDoc = new Document();
+		ArrayList<IndexableField> fields = new ArrayList<IndexableField>();
+		
+		doc1.getFields().stream()
+		.filter(f -> !(fieldsNonFusion.contains(f.name())))
+		.forEach(f -> fields.add((IndexableField) f));
+		
+		doc2.getFields().stream()
+		.filter(f -> !(fieldsNonFusion.contains(f.name())))
+		.forEach(f -> fields.add((IndexableField) f));
+	  
+		fields.stream()
+		.collect(Collectors.groupingBy(IndexableField::name)).entrySet().stream() //cim10: field1,field2 , anapath:field1,field2 ...
+		.forEach(e -> {	
+						e.getValue().stream()			
+						.map(f -> f.stringValue())		//field1 -> value of field1
+						.distinct()
+						.forEach(v -> mergedDoc.add(new StringField(e.getKey(), v, Field.Store.YES)));
+						}
+				);
+		try{
+		mergedDoc.add(new StringField("fusionDe", doc1.getField("id").stringValue(), Field.Store.YES));
+		mergedDoc.add(new StringField("fusionDe", doc2.getField("id").stringValue(), Field.Store.YES));
+
+		}catch(Exception e){}
+		
+		//pas besoin de faire fusionDe, doc.getField("fusionDe")... car on a itéré sur les fields des docs
+		//a fusioner et on les a ajouté au merged, donc ils y sont deja
+		
+		return mergedDoc;
+
+		}
 	
 	public static ArrayList<String> updateAllDocsAfterConflictsDetection() {
 		ArrayList<Document> traiteEtMaj = findTreatedAndMaj(); //TODO envoyer en aval pour supp des maladies
@@ -330,7 +385,7 @@ public class Gestion {
 				
 	}
 	
-	public static Document mergeDocs (Document doc1, Document doc2, String docIndex) {	
+	public static Document mergeDoc1IntoDoc2 (Document doc1, Document doc2, String docIndex) {	
 		List<String> fieldsConserves = Arrays.asList("id", "maj","traite");
 		List<String> codeFields = Arrays.asList("cim10", "adicap");
 
@@ -487,16 +542,20 @@ public class Gestion {
 		return allRecords;
 	}
 	
-	public static ArrayList<Document> groupRecordsByTraitAndConvertIntoDocument(Stream<Record> allRecords, Integer lastIndexValue){
+	public static ArrayList<Document> groupRecordsByTraitAndConvertIntoDocument(Stream<Record> allRecords){
 		 /* Create object of AtomicInteger with initial value `0` */
 	    AtomicInteger docIndex = new AtomicInteger(lastIndexValue);
 		
-		return (ArrayList<Document>) allRecords
+		 ArrayList<Document> documents = (ArrayList<Document>) allRecords
 		.collect(Collectors.groupingBy(Record::getTraits))
 		.entrySet().parallelStream()
 		.map( e -> individuToDocument( e.getKey(), e.getValue(), docIndex.getAndIncrement() ) )
 		.collect(Collectors.toList());
-	
+		 
+		 lastIndexValue = docIndex.get();
+		 
+		 return documents;
+		
 	}
 	public static void mergeExistingIndividualOrAddNewToIndex(String indexDir, ArrayList<Document> documents){
 		try {
@@ -520,7 +579,7 @@ public class Gestion {
 					//-----------------------------------------------------------------------------------
 					
 					//-----------Creation + MAJ d'un nouveau document : fusion du courrant (x) et de l'existant (exacthit)-----	
-					Document mergedDoc = mergeDocs(x, exactHit.get(), exactHitId);
+					Document mergedDoc = mergeDoc1IntoDoc2(x, exactHit.get(), exactHitId);
 					try {
 						finalIndexer.getWriter().updateDocument(new Term("id", exactHit.get().getField("id").stringValue()), mergedDoc);
 					} catch (IOException e1) {
@@ -567,5 +626,12 @@ public class Gestion {
 			e1.printStackTrace();
 		}
 	}
-		
+	
+	public static void displayDoc(Document document){
+		System.out.println("Individu:");
+				
+		document.getFields().stream().forEach(f -> System.out.println(f.name() + f.stringValue()));
+	
+	}
+	
 }
