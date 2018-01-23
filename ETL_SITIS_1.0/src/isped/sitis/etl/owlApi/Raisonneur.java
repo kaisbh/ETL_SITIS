@@ -275,7 +275,7 @@ public class Raisonneur {
 
 	public static void main(String[] args) throws OWLOntologyCreationException, OWLOntologyStorageException {
 		// TODO Auto-generated method stub
-<<<<<<< HEAD
+
 		
 		
 		
@@ -295,11 +295,11 @@ public class Raisonneur {
 			 // requête selection idpat  et liste cim10 et string
 			String sql = (" select `id`,`CIM10`,`adicap` from new_testmaladie ORDER BY 'id'");
 			// requete insertion resultat
-			String mInsert = ("INSERT INTO notif_cas(id_Patient, id_Cancer) VALUES ('"+id+"','"+ partok+ "');") ;
+		
 			
 				
 			PreparedStatement prepare =con.prepareStatement(sql);
-			PreparedStatement prepare1 = con.prepareStatement (mInsert);
+			
 			ResultSet res= prepare.executeQuery();
 			// pour chaque résultat appel de la methode get disease puis ajout résultats dans table
 				 while (res.next()) {
@@ -332,124 +332,11 @@ public class Raisonneur {
 					//s'il y a plusieurs URI : récupération des classes équivalentes uniquement (dans le else)
 					//String equivMal = M.getClassEquilMal();
 				 
-				 	String equivMal = "Node( <http://www.semanticweb.org/owlapi/ontologieRegistre#Mm1> ), Node( <http://www.semanticweb.org/owlapi/ontologieRegistre#Mm34> ))";
-					String[] partsEquiv = equivMal.split(Pattern.quote(","));
+				 	String equivMal = M.getClassEquilMal();
+					String[] partsEquiv = equivMal.split(Pattern.quote("<"));
 					id = M.getID();
-=======
 
-
-
-
-		Set <String> cimss10 = new HashSet <String>();
-		cimss10.add("C00.1");
-		cimss10.add("C02.1");
-
-		Set <String> adicapss = new HashSet<String>();
-		adicapss.add("BHOTB7A0");
-		adicapss.add("PHUVU7G3");
-
-		Maladie M = new Maladie();
-
-		Raisonneur.getDiseases(cimss10, adicapss, "ab", M);
-
-		// Création d'un string equivMal qui récupère l'(les) URI des classes ééquivalentes
-		// partsEquiv récupère toutes les URI
-		// s'il y a qu'une URI : récupération des superClasses
-		//s'il y a plusieurs URI : récupération des classes équivalentes uniquement (dans le else)
-		//String equivMal = M.getClassEquilMal();
-		String equivMal = "Node( <http://www.semanticweb.org/owlapi/ontologieRegistre#Mm1> ), Node( <http://www.semanticweb.org/owlapi/ontologieRegistre#Mm34> ))";
-		String[] partsEquiv = equivMal.split(Pattern.quote(","));
-		String id = M.getID();
-
-		if(partsEquiv.length == 1)
-		{	 	 	
-			String superClassMal = M.getSuperclass();
-			String[] partsSuper = superClassMal.split(Pattern.quote(","));
-
-			for (int i=0; i<partsSuper.length; i++) 
-			{
-				String part = partsSuper[i]; 
-				String partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
-
-				Connection con;
-
-				try {
-
-					// connection a la base
-					Class.forName("com.mysql.jdbc.Driver");
-					con= DriverManager.getConnection("jdbc:mysql://127.0.0.1/registre", "root", "");
-
-					// REQUETE : insertion de la maladie et de l'identifiant patient
-					// le flag se met automatiquement à 0 et la date et heure se met à l'heure courante de l'insertion
-					String mInsert = ("INSERT INTO notif_cas(id_Patient, id_Cancer) VALUES ('"+id+"','"+ partok+ "');") ;
-					PreparedStatement prepare = con.prepareStatement (mInsert);
-
-					prepare.executeUpdate();
-
-					con.close();
-					prepare.close();
-
-
-				}catch (ClassNotFoundException e){
-					System.out.println("Driver spécifié non trouvé");
-					e.printStackTrace();
-				}catch (SQLException e) {
-					// TODO Auto-generated catch bloc
-					e.printStackTrace();
-				}
-
-				System.out.println(partok);
-				// ce system out.println sert à vérifier la liste des URI
-				System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
-			}
-
-		}
-		else	 
-		{
-			for (int i=0; i<partsEquiv.length; i++) 
-			{
-				String part = partsEquiv[i]; 
-				String partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
-
-
-				Connection con;
-
-				try {
-
-					// connection a la base
-					Class.forName("com.mysql.jdbc.Driver");
-					con= DriverManager.getConnection("jdbc:mysql://127.0.0.1/registre", "root", "");
-
-					// REQUETE : insertion de la maladie et de l'identifiant patient
-					// le flag se met automatiquement à 0 et la date et heure se met à l'heure courante de l'insertion
-					String mInsert = ("INSERT INTO notif_cas(id_Patient, id_Cancer) VALUES ('"+id+"','"+ partok+ "');") ;
-					PreparedStatement prepare = con.prepareStatement (mInsert);
-
-					prepare.executeUpdate();
-
-					con.close();
-					prepare.close();
-
-
-				}catch (ClassNotFoundException e){
-					System.out.println("Driver spécifié non trouvé");
-					e.printStackTrace();
-				}catch (SQLException e) {
-					// TODO Auto-generated catch bloc
-					e.printStackTrace();
-				}
-
-
-				System.out.println(partok);
-				// ce system out.println sert à vérifier la liste des URI
-				System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
-			}	 
-		}
-	}
->>>>>>> branch 'ETLhad' of https://github.com/kaisbh/ETL_SITIS.git
-
-<<<<<<< HEAD
-					if(partsEquiv.length == 1)
+					if(partsEquiv.length == 2 )
 					{	 	 	
 						String superClassMal = M.getSuperclass();
 						String[] partsSuper = superClassMal.split(Pattern.quote(","));
@@ -458,8 +345,10 @@ public class Raisonneur {
 						{
 							 part = partsSuper[i]; 
 							 partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
-
+								String mInsert = ("INSERT INTO notif_cas(ID_Pat, ID_Cancer) VALUES ('"+id+"','"+ partok+ "');") ;
+								PreparedStatement prepare1 = con.prepareStatement (mInsert);
 							prepare1.executeUpdate();
+							System.out.println(prepare1.toString());
 							
 
 							System.out.println(partok);
@@ -467,10 +356,12 @@ public class Raisonneur {
 							System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
 				 				 }
 					}else {
-						for (int i=0; i<partsEquiv.length; i++) 
+						for (int i=2; i<partsEquiv.length; i++) 
 						{
-							part = partsEquiv[i]; 
+							part = partsEquiv[i];
 							partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
+							String mInsert = ("INSERT INTO notif_cas(ID_Pat, ID_Cancer) VALUES ('"+id+"','"+ partok+ "');") ;
+							PreparedStatement prepare1 = con.prepareStatement (mInsert);
 							prepare1.executeUpdate();
 
 							System.out.println(partok);
@@ -499,10 +390,3 @@ public class Raisonneur {
  		
  	
 						}}
-=======
-
-
-}
-
->>>>>>> branch 'ETLhad' of https://github.com/kaisbh/ETL_SITIS.git
-
