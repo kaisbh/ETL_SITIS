@@ -1806,8 +1806,8 @@ public class OntologieISN {
 */
 		
 		
-		//File enregistrement = new File("C:/Users/hadri/Desktop/onto_registre/ONTO_REGISTRE/OR.owl");
-		File enregistrement = new File("./ressource/OR.owl");
+		File enregistrement = new File("C:/Users/hadri/Desktop/onto_registre/ONTO_REGISTRE/OR.owl");
+		//File enregistrement = new File("./ressource/OR.owl");
 		manager.saveOntology(ontologieRegistre,IRI.create(enregistrement.toURI()));
 		 
 		 
