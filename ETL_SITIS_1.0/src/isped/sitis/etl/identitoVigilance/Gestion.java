@@ -46,6 +46,7 @@ public class Gestion {
 	static boolean firstTime = true; //mettre true si premiere indexation, false sinon
 	static Integer lastIndexValue = 1; // gade en memoire le dernier index , sorte de numAuto pour doc lucene, a sauver hors de l'app pour recupéré plus tard
 	static String indexDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexFinal";
+	static String indexHistoDir ="/Users/pierreo/Documents/Cours/COURS VIANNEY/projet_V5-2017/indexHistorique";
 
 	static Set<Set<String>> Conflicts = new HashSet<Set<String>>();
 	static ArrayList<String> newConflicts = new ArrayList<String>();
@@ -56,7 +57,7 @@ public class Gestion {
 	
 	public static void main(String[] args) throws IndexNotFoundException {
 		
-		Stream<Record> allRecords = getRecordsFromDB();
+		Stream<Record> allRecords = getRecordsFromDB("cancerETL3", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
 		ArrayList<Document> documents = groupRecordsByTraitAndConvertIntoDocument(allRecords);
 		
 		if(firstTime) {
@@ -76,17 +77,54 @@ public class Gestion {
 		
 		idsDesEntreesASuppEnAval.addAll(updateAllDocsAfterConflictsDetection());
 		
-		System.out.println(Conflicts);
+		System.out.println("Conflicts: " + Conflicts);
 		Searcher searcher = new Searcher(indexDir);
 		Conflicts.stream()
 		.forEach(set -> {
 			set.stream().forEach(id -> searcher.exactQuery("id", id));
 												});
 		
+		insertAllDocsDansTablePatient("cancerETL3", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
+		
+		
+		
+/*testing
+		
+		//Ici testing mais devrait avoir fonction de resolution des conflits qui renvoi les groupes
+		//de docs fusionnés sur lesquels on lance fusionGroupedDocs
+		
+		
+		 System.out.println("Resolution des conflits: ");
+		 
 		AtomicInteger docid = new AtomicInteger(lastIndexValue);
-		Conflicts.stream().forEach(c -> {
-			displayDoc(fusionGroupedDocs(c, docid.getAndIncrement()));
-		});
+		
+		//Conflicts.stream().forEach(c -> {
+		Iterator iter = Conflicts.iterator();
+		Set<String> first = (Set<String>) iter.next();
+		
+			displayDoc(fusionGroupedDocs(first, docid.getAndIncrement()));
+			
+		//});
+		
+		//Conflicts.stream().forEach(c -> {
+			copyFusionedDocsFromIndextoHisto(first);
+			deleteFusionedDocsFromIndex(first);
+		//});
+		
+		/*Set<Set<String>> resolvedConflicts = Conflicts.stream()
+				.map(c -> c)
+				.collect(Collectors.toSet());*/
+				
+		//resolvedConflicts.stream()
+		//		.forEach(c -> {
+/*testing			deleteResolvedConflicts(first);
+		//});
+		
+		System.out.println("Conflicts restants : " + Conflicts);
+		
+		System.out.println("Dernier id : " + lastIndexValue);
+
+		
 		
 		/*ConcurrentHashMap<String,List<String>> testConflictMap = new ConcurrentHashMap<String,List<String>>();
 		testConflictMap.put("11", Arrays.asList("4","12","10"));
@@ -97,6 +135,125 @@ public class Gestion {
 		preExistingConflicts.add(h);
 		System.out.println(walkConflictMapforKey("4", testConflictMap));*/
 		
+		
+	}
+	
+	public static void insertAllDocsDansTablePatient(String db, String driver, String adressPort, String id, 
+	String pwd) {
+		JdbcConnection jdbc = new JdbcConnection(db, driver, adressPort, id, pwd);
+		jdbc.jdbcload();
+		jdbc.jdbcConnect();
+		
+		Searcher searcher = new Searcher(indexDir);
+		
+		searcher.exactQuery("maj", "false").stream()
+		.forEach(doc -> insertDocDansTablePatient(doc, jdbc));
+
+		jdbc.jdbcClose();
+
+	}
+	
+	public static void insertDocDansTablePatient( Document doc, JdbcConnection jdbc) {
+		
+		Set<String> DocsConflictuels = Conflicts.stream().flatMap(set -> set.stream())
+				.collect(Collectors.toSet());
+		
+		ArrayList parameters = new ArrayList();		
+		String sql = new String();
+		
+		String Id_Patient = doc.getField("id").stringValue();
+		
+		String Id_Group = "0";
+		if( doc.getFields().stream().anyMatch(f -> f.name().equals("groupId")) ) {
+			Id_Group = doc.getField("groupId").stringValue();
+		}
+				
+		String Nom = doc.getField("nom").stringValue();
+		String Prenom = doc.getField("prenom").stringValue();
+		String Date_Naissance = doc.getField("ddn").stringValue();
+		String Sexe = doc.getField("sexe").stringValue();
+	
+		
+		Optional<String> CIM10 = Arrays.asList(doc.getFields("cim10")).stream()
+				.map(field -> field.stringValue())
+				.reduce( (string1,string2) -> string1 + "," + string2)
+				;
+				
+				
+		Optional<String> Adicap = Arrays.asList(doc.getFields("adicap")).stream()
+				.map(field -> field.stringValue())
+				.reduce( (string1,string2) -> string1 + "," + string2);
+
+		
+		
+		if(!DocsConflictuels.contains(doc.getField("id").stringValue())) {
+			
+			String Flag_Trait_Identif = (doc.getField("maj").stringValue().equals("false"))
+					? "0":"1";
+			String Flag_Trait_Cancer = (doc.getField("traite").stringValue().equals("false"))
+					? "0":"1";
+			
+			sql = "INSERT INTO `tab_patient` (`Id_Patient`, `Id_Group`, `Nom`, `Prenom`, "
+					+ "`Date_Naissance`, `Sexe`, `Flag_Trait_Identif`, `Flag_Trait_Cancer`, `CIM10`, `Adicap`)"
+					+ " VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+			
+			System.out.println(sql);
+
+			parameters.add(Id_Patient);
+			parameters.add(Id_Group);
+			parameters.add(Nom);
+			parameters.add(Prenom);
+			parameters.add(Date_Naissance);
+			parameters.add(Sexe);
+			parameters.add(Flag_Trait_Identif);
+			parameters.add(Flag_Trait_Cancer);
+			
+			if(CIM10.isPresent()) {
+				parameters.add(CIM10.get().trim());
+				}else {
+					parameters.add("");
+				}
+				if(Adicap.isPresent()) {
+					parameters.add(Adicap.get().trim());
+				}else {
+					parameters.add("");
+				}
+
+			
+
+		}else {
+			sql = "INSERT INTO `tab_pat_temp` (`Id_Pat_Temp`, `Id_Group`, "
+					+ "`Nom`, `Prenom`, `Date_Naissance`,`Sexe`, `CIM10`, `Adicap`) "
+					+ " VALUES ( ?, ?, ?, ?, ?, ?, ?, ?)";
+			
+			System.out.println(sql);
+			
+			parameters.add(Id_Patient);
+			parameters.add(Id_Group);
+			parameters.add(Nom);
+			parameters.add(Prenom);
+			parameters.add(Date_Naissance);
+			
+			parameters.add(Sexe);
+			
+			if(CIM10.isPresent()) {
+			parameters.add(CIM10.get());
+			}else {
+				parameters.add("");
+			}
+			if(Adicap.isPresent()) {
+				parameters.add(Adicap.get());
+			}else {
+				parameters.add("");
+			}
+			
+
+		}
+		jdbc.ajoutEnBase(sql, parameters);
+
+
+		
+
 	}
 	
 	public static void setGroupIdsToGroupedDocs(Set<Set<String>> conflicts) {
@@ -105,19 +262,21 @@ public class Gestion {
 		try {
 			Indexer indexer = new Indexer(indexDir);
 			conflicts.stream()
-			.forEach(groupOfIds -> 
+			.forEach(groupOfIds -> {
+				Integer thisGroupId = groupId.getAndIncrement();
 				groupOfIds.stream()
 				.map(id -> searcher.exactQuery("id", id))
 				.flatMap(x -> x.stream())
 				.forEach(doc -> {
-					doc.add(new StringField("groupId", String.valueOf(groupId.getAndIncrement()), Field.Store.YES));
+					doc.add(new StringField("groupId", String.valueOf(thisGroupId), Field.Store.YES));
 					try {
 						indexer.getWriter().updateDocument(new Term("id", doc.getField("id").stringValue()), doc);
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
-				})
+					});
+			}
 				);
 			indexer.closeIndex();
 		} catch (IOException e) {
@@ -126,6 +285,58 @@ public class Gestion {
 		
 		lastGroupId =groupId.get();
 				
+	}
+	
+	public static void deleteResolvedConflicts(Set<String> resolvedConflictsIds) {
+		Conflicts.removeIf(conflicts -> conflicts.equals(resolvedConflictsIds));
+	}
+	public static void deleteFusionedDocsFromIndex(Set<String> idsGroup) {
+		//On retire les docs supprimé de l index
+		Searcher searcher = new Searcher(indexDir);
+				System.out.println("Documents supprimés de l'index car fusionnés:");
+				try {
+					Indexer indexer = new Indexer(indexDir);
+					
+					idsGroup.stream()
+					.forEach(id -> {
+						try {
+							searcher.exactQuery("id",id );
+
+							indexer.getWriter().deleteDocuments(new Term("id", id));
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+					);
+					indexer.closeIndex();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+	}
+	public static void copyFusionedDocsFromIndextoHisto(Set<String> idsGroup) {
+		Searcher searcher = new Searcher(indexDir);
+		
+		System.out.println("Documents ajoutés à l'index hitorique car fusionnés:");
+		//On ajoute les docs supprimé a l historique
+		try {
+			Indexer indexertoHisto = new Indexer(indexHistoDir);
+			
+			idsGroup.stream()
+			.map(id -> searcher.exactQuery("id", id))
+			.flatMap(doclist -> doclist.stream())
+			.forEach(doc -> {
+				try {
+					indexertoHisto.getWriter().addDocument(doc);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			);
+			indexertoHisto.closeIndex();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
 	}
 	
 	public static Document fusionGroupedDocs(Set<String> idsGroup, Integer docId) {
@@ -142,7 +353,8 @@ public class Gestion {
 		.add(new StringField("maj", "false", Field.Store.YES));
 		fusionedDoc.get()
 		.add(new StringField("traite", "false", Field.Store.YES));
-
+		
+		
 		return fusionedDoc.get();
 	}
 	
@@ -166,18 +378,23 @@ public class Gestion {
 						e.getValue().stream()			
 						.map(f -> f.stringValue())		//field1 -> value of field1
 						.distinct()
-						.forEach(v -> mergedDoc.add(new StringField(e.getKey(), v, Field.Store.YES)));
+						.forEach(v -> {
+							mergedDoc.add(new StringField(e.getKey(), v, Field.Store.YES));
+						})
+						;
 						}
 				);
 		try{
 		mergedDoc.add(new StringField("fusionDe", doc1.getField("id").stringValue(), Field.Store.YES));
-		mergedDoc.add(new StringField("fusionDe", doc2.getField("id").stringValue(), Field.Store.YES));
-
 		}catch(Exception e){}
+		try{
+		mergedDoc.add(new StringField("fusionDe", doc2.getField("id").stringValue(), Field.Store.YES));
+		}catch(Exception e){}
+		
 		
 		//pas besoin de faire fusionDe, doc.getField("fusionDe")... car on a itéré sur les fields des docs
 		//a fusioner et on les a ajouté au merged, donc ils y sont deja
-		
+				
 		return mergedDoc;
 
 		}
@@ -368,7 +585,7 @@ public class Gestion {
 				}catch (Exception e) {}
 	    			}
 	    		);
-	    cim10.stream().distinct().forEach(v -> doc.add(new StringField("cim10", v, Field.Store.YES)));
+	    cim10.stream().filter(s ->!s.equals("")).distinct().forEach(v -> doc.add(new StringField("cim10", v, Field.Store.YES)));
 	    
 
 	    /*records.stream()
@@ -396,7 +613,7 @@ public class Gestion {
 			adicap.add(x.getAdicap());
 			}
 		);
-	    adicap.stream().distinct().forEach(v -> doc.add(new StringField("adicap", v, Field.Store.YES)));
+	    adicap.stream().filter(s ->!s.equals("")).distinct().forEach(v -> doc.add(new StringField("adicap", v, Field.Store.YES)));
 
 	    
 	   /* records.stream()
@@ -521,7 +738,9 @@ public class Gestion {
 		ArrayList parameters = new ArrayList();
 		Hashtable typeForColumnIndex = new Hashtable<Integer, String>();
 		
-		String sql = "select Sexe, DateNaissance, Prenom, Nom, NumAuto, DP, DR FROM TAB_sejour WHERE NumAuto BETWEEN ? AND ?";
+		String tab = (firstTime) ? "TAB_sejour" : "TAB_sejour2";
+		
+		String sql = "select Sexe, DateNaissance, Prenom, Nom, NumAuto, DP, DR FROM "+tab+" WHERE NumAuto BETWEEN ? AND ?";
 		parameters.add(NumAutoStart);
 		parameters.add(NumAutoStop);
 		typeForColumnIndex.put(1, "Integer");typeForColumnIndex.put(1, "String");typeForColumnIndex.put(2, "String");typeForColumnIndex.put(3, "String");
@@ -554,11 +773,11 @@ public class Gestion {
 	    // ... repeat for each column in result set
 	    writer.addDocument(doc);*/
 	
-	public static Stream<Record> getRecordsFromDB(){
+	public static Stream<Record> getRecordsFromDB(String db, String driver, String adressPort, String id, String pwd){
 		
 		Stream<Record> allRecords;
 		
-		JdbcConnection jdbc = new JdbcConnection("cancerETL", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
+		JdbcConnection jdbc = new JdbcConnection(db, driver, adressPort, id, pwd);
 		jdbc.jdbcload();
 		jdbc.jdbcConnect();
 		
