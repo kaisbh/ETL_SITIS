@@ -333,10 +333,10 @@ public class Raisonneur {
 					//String equivMal = M.getClassEquilMal();
 				 
 				 	String equivMal = M.getClassEquilMal();
-					String[] partsEquiv = equivMal.split(Pattern.quote("<"));
+					String[] partsEquiv = equivMal.split(Pattern.quote("> <"));
 					id = M.getID();
 
-					if(partsEquiv.length == 2 )
+					if(partsEquiv.length == 1 )
 					{	 	 	
 						String superClassMal = M.getSuperclass();
 						String[] partsSuper = superClassMal.split(Pattern.quote(","));
@@ -345,10 +345,10 @@ public class Raisonneur {
 						{
 							 part = partsSuper[i]; 
 							 partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
-								String mInsert = ("INSERT INTO notif_cas(ID_Pat, ID_Cancer) VALUES ('"+id+"','"+ partok+ "');") ;
+								String mInsert = ("INSERT INTO tab_cancer(Id_Patient, Id_libelle_cancer) VALUES ('"+id+"','"+ partok+ "');") ;
 								PreparedStatement prepare1 = con.prepareStatement (mInsert);
 							prepare1.executeUpdate();
-							System.out.println(prepare1.toString());
+							//System.out.println(prepare1.toString());
 							
 
 							System.out.println(partok);
@@ -356,18 +356,24 @@ public class Raisonneur {
 							System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
 				 				 }
 					}else {
-						for (int i=2; i<partsEquiv.length; i++) 
+						for (int i=0; i<partsEquiv.length; i++) 
 						{
 							part = partsEquiv[i];
+							if (part.equals("Node( <http://www.semanticweb.org/owlapi/ontologieRegistre#M1")){
+								System.out.println(part);	
+							}
+							else
+							{
 							partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
-							String mInsert = ("INSERT INTO notif_cas(ID_Pat, ID_Cancer) VALUES ('"+id+"','"+ partok+ "');") ;
+							String mInsert = ("INSERT INTO tab_cancer(Id_Patient, Id_libelle_cancer) VALUES ('"+id+"','"+ partok+ "');") ;
 							PreparedStatement prepare1 = con.prepareStatement (mInsert);
 							prepare1.executeUpdate();
 
-							System.out.println(partok);
+							System.out.println(part);
 							// ce system out.println sert à vérifier la liste des URI
-							System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
-						}}
+							System.out.println(M.getID()+ "-SuperC" + M.getSuperclass() +  "-Equivalente" + M.getClassEquilMal());
+							}
+							}}
 								
 
 		
