@@ -77,10 +77,10 @@ public class Searcher {
 	public Optional<Document> exactQuery(String nom, String prenom, String sexe, String ddn) {
 		Builder booleanQuery = new BooleanQuery.Builder();
 		
-		Query query1 = new TermQuery(new Term("nom", nom));
-		Query query2 = new TermQuery(new Term("prenom", prenom));
-		Query query3 = new TermQuery(new Term("sexe", sexe));
-		Query query4 = new TermQuery(new Term("ddn", ddn));
+		TermQuery query1 = new TermQuery(new Term("nom", nom));
+		TermQuery query2 = new TermQuery(new Term("prenom", prenom));
+		TermQuery query3 = new TermQuery(new Term("sexe", sexe));
+		TermQuery query4 = new TermQuery(new Term("ddn", ddn));
 		
 		booleanQuery.add(query1, Occur.MUST);
 		booleanQuery.add(query2, Occur.MUST);
@@ -116,7 +116,7 @@ public class Searcher {
 	public ArrayList<Document> exactQuery(String field, String value) {
 		Builder booleanQuery = new BooleanQuery.Builder();
 		
-		Query query1 = new TermQuery(new Term(field, value));
+		TermQuery query1 = new TermQuery(new Term(field, value));
 		
 		booleanQuery.add(query1, Occur.MUST);
 		
@@ -147,8 +147,8 @@ public class Searcher {
 	public ArrayList<Document> searchUpdatedAndTreated() {
 		Builder booleanQuery = new BooleanQuery.Builder();
 		
-		Query query1 = new TermQuery(new Term("maj", "true"));
-		Query query2 = new TermQuery(new Term("traite", "true"));
+		TermQuery query1 = new TermQuery(new Term("maj", "true"));
+		TermQuery query2 = new TermQuery(new Term("traite", "true"));
 
 		booleanQuery.add(query1, Occur.MUST);
 		booleanQuery.add(query1, Occur.MUST);
@@ -165,7 +165,7 @@ public class Searcher {
 		          int docId = hits[i].doc;
 		          Document d = searcher.doc(docId);
 		          returnedDocs.add(d);
-		          System.out.println((i + 1) + ". " + d.get("nom") + d.get("prenom") + d.get("sexe") + d.get("ddn") + " score=" + hits[i].score);
+		          System.out.println((i + 1) + ". " + d.get("nom") + d.get("prenom") + d.get("sexe") + d.get("ddn") + d.get("maj")+ d.get("traite")+ " score=" + hits[i].score);
 		        }
 			
 		} catch (IOException e) {

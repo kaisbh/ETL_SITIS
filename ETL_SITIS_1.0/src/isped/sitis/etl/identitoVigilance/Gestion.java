@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collector;
@@ -57,8 +58,10 @@ public class Gestion {
 	
 	public static void main(String[] args) throws IndexNotFoundException {
 		
+		System.out.println("Recupération des entrées de la DB:");
 		Stream<Record> allRecords = getRecordsFromDB("cancerETL3", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
 		ArrayList<Document> documents = groupRecordsByTraitAndConvertIntoDocument(allRecords);
+		
 		
 		if(firstTime) {
 			addNewToEmptyIndex(indexDir, documents);
@@ -66,18 +69,20 @@ public class Gestion {
 			mergeExistingIndividualOrAddNewToIndex(indexDir, documents);
 		}
 		
-		ConcurrentMap<String,Set<String>> conflictMap =  FindConflicts(indexDir);
-
-		Set<Set<String>> newConflicts = setConflicts(conflictMap);		
 		
+		ConcurrentMap<String,Set<String>> conflictMap =  FindConflicts(indexDir);
+		Set<Set<String>> newConflicts = setConflicts(conflictMap);		
 		Conflicts = updateConflicts(Conflicts, newConflicts); // removes previous Conflicts that were used to find new ones (no redondancy)
 															// adds new ones to Conflicts
 		setGroupIdsToGroupedDocs(Conflicts);
 		newConflicts.clear();
-		
-		idsDesEntreesASuppEnAval.addAll(updateAllDocsAfterConflictsDetection());
-		
 		System.out.println("Conflicts: " + Conflicts);
+		
+		System.out.println("Documents deja traités mis à jours, donc devant être suprimé en aval et renvoyés :");
+		idsDesEntreesASuppEnAval.addAll(updateAllDocsAfterConflictsDetection());
+		System.out.println(idsDesEntreesASuppEnAval);
+
+		
 		Searcher searcher = new Searcher(indexDir);
 		Conflicts.stream()
 		.forEach(set -> {
@@ -88,8 +93,8 @@ public class Gestion {
 		
 		
 		
-/*testing
-		
+
+/*testing		
 		//Ici testing mais devrait avoir fonction de resolution des conflits qui renvoi les groupes
 		//de docs fusionnés sur lesquels on lance fusionGroupedDocs
 		
@@ -134,6 +139,8 @@ public class Gestion {
 		HashSet<String> h = new HashSet<>(Arrays.asList("4", "5","6"));
 		preExistingConflicts.add(h);
 		System.out.println(walkConflictMapforKey("4", testConflictMap));*/
+		
+		
 		
 		
 	}
@@ -404,7 +411,7 @@ public class Gestion {
 		updateDocs(traiteEtMaj, Arrays.asList("traite","maj"), "false"); // on change les champs "traite" et "maj" en "false"
 		
 		Searcher searcher = new Searcher(indexDir);
-		ArrayList<Document> docsToUnMaj = searcher.exactQuery("maj", "true"); //TODO envoyer en aval pour supp des maladies
+		ArrayList<Document> docsToUnMaj = searcher.exactQuery("maj", "true"); 
 		updateDocs(docsToUnMaj, Arrays.asList("maj"), "false"); 
 		
 		return (ArrayList<String>) traiteEtMaj.stream().map(d -> d.getField("id").stringValue()).collect(Collectors.toList());
@@ -588,22 +595,6 @@ public class Gestion {
 	    cim10.stream().filter(s ->!s.equals("")).distinct().forEach(v -> doc.add(new StringField("cim10", v, Field.Store.YES)));
 	    
 
-	    /*records.stream()
-		.filter(x -> x instanceof SejourRecord)
-		.map(x -> (SejourRecord) x ) 
-		.map(r -> {
-					Set<String> set = new HashSet<String>();
-					set.add(r.getDp());
-					try{ 
-	    	    				set.add(r.getDr());
-					}catch (Exception e) {}
-					return set;
-				})
-		.flatMap(x -> x.stream())
-		.distinct()
-		.forEach(v -> {
-				doc.add(new StringField("cim10", v, Field.Store.YES));
-				});*/
 	    
 	    records.stream()
 		.filter(x -> x instanceof AnapathRecord)
@@ -616,19 +607,6 @@ public class Gestion {
 	    adicap.stream().filter(s ->!s.equals("")).distinct().forEach(v -> doc.add(new StringField("adicap", v, Field.Store.YES)));
 
 	    
-	   /* records.stream()
-		.filter(x -> x instanceof AnapathRecord)
-		.map(x -> (AnapathRecord) x ) 
-		.map(r -> {
-					Set<String> set = new HashSet<String>();
-					set.add(r.getAdicap());
-					return set;
-				})
-		.flatMap(x -> x.stream())
-		.distinct()
-		.forEach(v -> {
-				doc.add(new StringField("adicap", v, Field.Store.YES));
-				});*/
 	    
 	    return doc;
 				
@@ -754,8 +732,10 @@ public class Gestion {
 		ArrayList parameters = new ArrayList();
 		Hashtable typeForColumnIndex = new Hashtable<Integer, String>();
 		
+		String tab = (firstTime) ? "TAB_anapath" : "TAB_anapath2";
+		
 		String sql = "SELECT Sexe, DateNaissance, Prenom, Nom, sej.NumAuto as NumAuto, NumAdicap"
-				+ " FROM TAB_anapath sej INNER JOIN TAB_CODE_ANAPATH code ON sej.NumAuto = code.NumAnapath"
+				+ " FROM "+tab+" sej INNER JOIN TAB_CODE_ANAPATH code ON sej.NumAuto = code.NumAnapath"
 				+ " WHERE sej.NumAuto BETWEEN ? AND ?";
 		parameters.add(NumAutoStart);
 		parameters.add(NumAutoStop);
@@ -838,7 +818,9 @@ public class Gestion {
 					}
 					//Le mergedDoc remplace le document existant dans l'index, alors flaggé supprimé dans l'index (est alors skip lors recherche) 
 					//-----------------------------------------------------------------------------------				
-					System.out.println("Document"+ x +"Fusioné dans le document: "+ exactHit.get()+ "\n" + mergedDoc);	
+					System.out.println("Document:");
+					System.out.println(x );
+					System.out.println("Fusioné dans le document: "+ exactHit.get()+ "\n" + mergedDoc);	
 					
 				}else {
 					try {
