@@ -86,7 +86,7 @@ public class Gestion {
 		
 		insertAllDocsDansTablePatient("cancerETL3", "com.mysql.jdbc.Driver", "localhost:8889", "root", "root");
 		
-		
+		//searcher.exactQuery("nom", "eloste").stream().forEach(x->displayDoc(x));
 		
 /*testing
 		
@@ -565,8 +565,8 @@ public class Gestion {
 	    doc.add(new StringField("id", String.valueOf(docIndex), Field.Store.YES));
 	   // doc.add(new StringField("id_group", String.valueOf(docIndex), Field.Store.YES));
 
-	    doc.add(new StringField("prenom", splitTraits[0], Field.Store.YES));
-	    doc.add(new StringField("nom", splitTraits[1], Field.Store.YES));
+	    doc.add(new StringField("prenom", splitTraits[0].toLowerCase(), Field.Store.YES));
+	    doc.add(new StringField("nom", splitTraits[1].toLowerCase(), Field.Store.YES));
 	    doc.add(new StringField("sexe", splitTraits[2], Field.Store.YES));
 	    doc.add(new StringField("ddn", splitTraits[3], Field.Store.YES));
 	    doc.add(new StringField("maj", "true", Field.Store.YES));

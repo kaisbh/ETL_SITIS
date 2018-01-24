@@ -77,10 +77,10 @@ public class Searcher {
 	public Optional<Document> exactQuery(String nom, String prenom, String sexe, String ddn) {
 		Builder booleanQuery = new BooleanQuery.Builder();
 		
-		Query query1 = new TermQuery(new Term("nom", nom));
-		Query query2 = new TermQuery(new Term("prenom", prenom));
-		Query query3 = new TermQuery(new Term("sexe", sexe));
-		Query query4 = new TermQuery(new Term("ddn", ddn));
+		TermQuery query1 = new TermQuery(new Term("nom", nom));
+		TermQuery query2 = new TermQuery(new Term("prenom", prenom));
+		TermQuery query3 = new TermQuery(new Term("sexe", sexe));
+		TermQuery query4 = new TermQuery(new Term("ddn", ddn));
 		
 		booleanQuery.add(query1, Occur.MUST);
 		booleanQuery.add(query2, Occur.MUST);
@@ -114,18 +114,18 @@ public class Searcher {
 	}
 	
 	public ArrayList<Document> exactQuery(String field, String value) {
-		Builder booleanQuery = new BooleanQuery.Builder();
+		//Builder booleanQuery = new BooleanQuery.Builder();
 		
-		Query query1 = new TermQuery(new Term(field, value));
+		TermQuery query1 = new TermQuery(new Term(field, value));
 		
-		booleanQuery.add(query1, Occur.MUST);
+		//booleanQuery.add(query1, Occur.MUST);
 		
 		TopScoreDocCollector collector = TopScoreDocCollector.create(1000000);
 		
 		ArrayList<Document> returnedDocs = new ArrayList<>();
 		
 		try {
-			searcher.search(booleanQuery.build(),collector);
+			searcher.search(query1,collector);
 			ScoreDoc[] hits = collector.topDocs().scoreDocs;
 			
 			for(int i=0;i<hits.length;++i) {
@@ -151,7 +151,7 @@ public class Searcher {
 		Query query2 = new TermQuery(new Term("traite", "true"));
 
 		booleanQuery.add(query1, Occur.MUST);
-		booleanQuery.add(query1, Occur.MUST);
+		booleanQuery.add(query2, Occur.MUST);
 
 		TopScoreDocCollector collector = TopScoreDocCollector.create(1000000);
 		
