@@ -276,112 +276,140 @@ public class Raisonneur {
 	public static void main(String[] args) throws OWLOntologyCreationException, OWLOntologyStorageException {
 		// TODO Auto-generated method stub
 
-		
-		
-		
-		
-		
-		
+
+
+
+
+
+
 		Connection con;
-	
- 		try { 			
- 			
-			 Class.forName("com.mysql.jdbc.Driver");
-			 con= DriverManager.getConnection("jdbc:mysql://127.0.0.1/registre", "root", "");
-			 Maladie M = new Maladie();
-			 String part = ""; 
+
+		try { 			
+
+			Class.forName("com.mysql.jdbc.Driver");
+			con= DriverManager.getConnection("jdbc:mysql://127.0.0.1/registre", "root", "");
+			Maladie M = new Maladie();
+			String part = ""; 
 			String partok=""; 
 			String id="";
-			 // requête selection idpat  et liste cim10 et string
-			String sql = (" select `id`,`CIM10`,`adicap` from new_testmaladie ORDER BY 'id'");
+			// requête selection idpat  et liste cim10 et string
+			String sql = (" select `id_patient`,`CIM10`,`adicap` from new_testmaladie ");
 			// requete insertion resultat
-		
-			
-				
+
+
+
 			PreparedStatement prepare =con.prepareStatement(sql);
-			
+
 			ResultSet res= prepare.executeQuery();
 			// pour chaque résultat appel de la methode get disease puis ajout résultats dans table
-				 while (res.next()) {
-					 String ID =  res.getString("id");
-					 String CIM10 = res.getString("CIM10");
-					 String ADICAP = res.getString("adicap");
-				
-					 Set <String> cims10 = new HashSet <String>();
-					 String [] cim = CIM10.split(",");
-					 for( int i = 0; i<cim.length; ++i) {
-						 cims10.add(cim[i]);
-					 }
-					 					 
-					 Set <String> adicaps = new HashSet <String>();
-					 ADICAP = ADICAP+",";
-					 String [] adicap = ADICAP.split(",");
-					 for( int i = 0; i<adicap.length; ++i) {
-						 adicaps.add(adicap[i]);
-					 					 }
-					
-					Raisonneur.getDiseases(cims10, adicaps, ID , M);
-				 	System.out.println( M.getID()+"  "+ M.getSuperclass()+ M.getClassEquilMal());
-				 	 					
-				 	
-				 	
-				 	
-					// Création d'un string equivMal qui récupère l'(les) URI des classes ééquivalentes
-					// partsEquiv récupère toutes les URI
-					// s'il y a qu'une URI : récupération des superClasses
-					//s'il y a plusieurs URI : récupération des classes équivalentes uniquement (dans le else)
-					//String equivMal = M.getClassEquilMal();
-				 
-				 	String equivMal = M.getClassEquilMal();
-					String[] partsEquiv = equivMal.split(Pattern.quote("> <"));
-					id = M.getID();
+			while (res.next()) {
+				String ID =  res.getString("id_patient");
+				String CIM10 = res.getString("CIM10");
+				String ADICAP = res.getString("adicap");
 
-					if(partsEquiv.length == 1 )
-					{	 	 	
-						String superClassMal = M.getSuperclass();
-						String[] partsSuper = superClassMal.split(Pattern.quote(","));
+				Set <String> cims10 = new HashSet <String>();
+				String [] cim = CIM10.split(",");
+				for( int i = 0; i<cim.length; ++i) {
+					cims10.add(cim[i]);
+				}
 
-						for (int i=0; i<partsSuper.length; i++) 
+				Set <String> adicaps = new HashSet <String>();
+				ADICAP = ADICAP+",";
+				String [] adicap = ADICAP.split(",");
+				for( int i = 0; i<adicap.length; ++i) {
+					adicaps.add(adicap[i]);
+				}
+
+				Raisonneur.getDiseases(cims10, adicaps, ID , M);
+				System.out.println( M.getID()+"  "+ M.getSuperclass()+ M.getClassEquilMal());
+
+
+
+
+				// Création d'un string equivMal qui récupère l'(les) URI des classes ééquivalentes
+				// partsEquiv récupère toutes les URI
+				// s'il y a qu'une URI : récupération des superClasses
+				//s'il y a plusieurs URI : récupération des classes équivalentes uniquement (dans le else)
+				//String equivMal = M.getClassEquilMal();
+
+				String equivMal = M.getClassEquilMal();
+				String[] partsEquiv = equivMal.split(Pattern.quote("> <"));
+				id = M.getID();
+
+				if(partsEquiv.length == 1 )
+				{	 	 	
+					String superClassMal = M.getSuperclass();
+					String[] partsSuper = superClassMal.split(Pattern.quote(","));
+
+					for (int i=0; i<partsSuper.length; i++) 
+					{
+						part = partsSuper[i]; 
+						partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
+						String mInsert = ("INSERT INTO tab_cancer(Id_Patient, Id_libelle_cancer) VALUES ('"+id+"','"+ partok+ "');") ;
+						PreparedStatement prepare1 = con.prepareStatement (mInsert);
+						prepare1.executeUpdate();
+						//System.out.println(prepare1.toString());
+
+						String partsplitM = partok.substring(partok.indexOf("m") +1 , partok.indexOf("t"));
+						String partsplitT = partok.substring(partok.indexOf("t") +1);
+						if(partsplitT.equals("")){
+						String mInsertS = ("INSERT INTO tab_cancer_split (morpho) VALUES ('"+partsplitM+"');") ;
+						PreparedStatement prepare2 = con.prepareStatement (mInsertS);
+						prepare2.executeUpdate();							
+						}
+						else
 						{
-							 part = partsSuper[i]; 
-							 partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
-								String mInsert = ("INSERT INTO tab_cancer(Id_Patient, Id_libelle_cancer) VALUES ('"+id+"','"+ partok+ "');") ;
-								PreparedStatement prepare1 = con.prepareStatement (mInsert);
-							prepare1.executeUpdate();
-							//System.out.println(prepare1.toString());
-							
+						String mInsertS = ("INSERT INTO tab_cancer_split (morpho, topo) VALUES ('"+partsplitM+"','"+ partsplitT+ "');") ;
+						PreparedStatement prepare2 = con.prepareStatement (mInsertS);
+						prepare2.executeUpdate();
+						}
+						
 
-							System.out.println(partok);
-							// ce system out.println sert à vérifier la liste des URI
-							System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
-				 				 }
-					}else {
-						for (int i=0; i<partsEquiv.length; i++) 
+						System.out.println(partok);
+						// ce system out.println sert à vérifier la liste des URI
+						System.out.println(M.getID()+ "-" + M.getSuperclass() +  "-" + M.getClassEquilMal());
+					}
+				}else {
+					for (int i=0; i<partsEquiv.length; i++) 
+					{
+						part = partsEquiv[i];
+						if (part.equals("Node( <http://www.semanticweb.org/owlapi/ontologieRegistre#M1")){
+							System.out.println(part);	
+						}
+						else
 						{
-							part = partsEquiv[i];
-							if (part.equals("Node( <http://www.semanticweb.org/owlapi/ontologieRegistre#M1")){
-								System.out.println(part);	
-							}
-							else
-							{
 							partok = part.substring(part.indexOf("#") +2 , part.indexOf(">"));
 							String mInsert = ("INSERT INTO tab_cancer(Id_Patient, Id_libelle_cancer) VALUES ('"+id+"','"+ partok+ "');") ;
 							PreparedStatement prepare1 = con.prepareStatement (mInsert);
 							prepare1.executeUpdate();
-
+							
+							String partsplitM = partok.substring(partok.indexOf("m") +1 , partok.indexOf("t"));
+							String partsplitT = partok.substring(partok.indexOf("t") +1);
+							if(partsplitT.equals("")){
+							String mInsertS = ("INSERT INTO tab_cancer_split (morpho) VALUES ('"+partsplitM+"');") ;
+							PreparedStatement prepare2 = con.prepareStatement (mInsertS);
+							prepare2.executeUpdate();							
+							}
+							else
+							{
+							String mInsertS = ("INSERT INTO tab_cancer_split (morpho, topo) VALUES ('"+partsplitM+"','"+ partsplitT+ "');") ;
+							PreparedStatement prepare2 = con.prepareStatement (mInsertS);
+							prepare2.executeUpdate();
+							}
+							
 							System.out.println(part);
 							// ce system out.println sert à vérifier la liste des URI
 							System.out.println(M.getID()+ "-SuperC" + M.getSuperclass() +  "-Equivalente" + M.getClassEquilMal());
-							}
-							}}
-								
+						}
+					}}
 
-		
 
-		}
-		con.close();
-		prepare.close();
-		res.close();
+
+
+			}
+			con.close();
+			prepare.close();
+			res.close();
 		}catch (ClassNotFoundException e){
 
 			System.out.println("Driver spécifié non trouvé");
@@ -391,8 +419,9 @@ public class Raisonneur {
 		}catch (SQLException e) {
 			e.printStackTrace();
 		}
-							
-					
- 		
- 	
-						}}
+
+
+
+
+	}
+}
